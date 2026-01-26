@@ -25,6 +25,8 @@ Candidate topics extracted from ambiguities flagged in other articles.
 - **VDOM-less frameworks (Svelte, SolidJS)** — How do frameworks that compile away the Virtual DOM achieve performance? What tradeoffs do they make? Also covers downsides of the VDOM approach: memory overhead, diffing cost, GC pressure.
   - Source: [why-does-react-use-a-virtual-dom](drafts/why-does-react-use-a-virtual-dom.md)
 
+- **What problem do React state management libraries solve?** — What gaps in React's built-in state primitives do libraries like Redux and Zustand address? Potential spin-off comparing specific libraries (Redux, Zustand, and a third) if the main article gets too long.
+
 ## In Progress
 
 <!-- Topics currently being drafted -->
