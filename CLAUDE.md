@@ -101,7 +101,7 @@ tags: [tag1, tag2, tag3]
 
 #### Punctuation
 
-- **Em dashes** — always with spaces on both sides, not attached to words (British/web convention for screen readability)
+- **Em dashes** — use them sparsely, always with spaces on both sides, not attached to words (British/web convention for screen readability)
 - **Periods and brackets** — when a parenthetical ends a sentence that began outside the brackets, the period goes outside: "This is an example (like this)." Not "(like this.)"
 - **Serial comma** — use it (red, white, and blue)
 - **Double quotes** for scare quotes around terms being examined: "touching the DOM"
