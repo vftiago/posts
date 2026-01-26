@@ -99,6 +99,25 @@ tags: [tag1, tag2, tag3]
 - Keep paragraphs focused on a single idea
 - Explain _why_, not just _what_
 
+#### Avoiding Dramatic Prose
+
+The tone should be technical and measured, not dramatic or emotional.
+
+**Avoid:**
+
+- Manufactured tension: "You have one hour. The interviewer is watching."
+- Imperative commands to the reader: "Resist it." "Stop and think."
+- Staccato repetition for artificial emphasis: "X is fast. Y is fast. Z is fast. W is not."
+- Colloquial anthropomorphizing: "without the browser caring at all" (prefer precise technical language like "without triggering browser rendering work")
+- Framing advice as urgent warnings: "Five minutes here saves twenty minutes later."
+
+**Prefer:**
+
+- Direct statements of fact with reasoning: "Before writing code, it's worth reading each requirement carefully to identify hidden implications." State the advice and why it matters in the same breath.
+- Technical explanations over emotional appeals
+- Let the content earn emphasis through clarity, not rhetorical devices
+- When making a recommendation, state it plainly: "Option 2 is pragmatic for a timed exercise."
+
 #### Punctuation
 
 - **Em dashes** — use them sparsely, always with spaces on both sides, not attached to words (British/web convention for screen readability)
