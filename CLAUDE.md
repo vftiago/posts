@@ -95,9 +95,12 @@ tags: [tag1, tag2, tag3]
 
 - Use active voice
 - Contractions are fine (isn't, you're, it's)
-- Short, direct sentences. Fragments for emphasis are acceptable.
 - Keep paragraphs focused on a single idea
 - Explain _why_, not just _what_
+
+#### Sentence Length and Flow
+
+Prefer longer, flowing prose that combines related ideas into single sentences. Short sentences and fragments are fine for emphasis or to drive a point across, but they shouldn't be the default.
 
 #### Avoiding Dramatic Prose
 
@@ -123,6 +126,8 @@ The tone should be technical and measured, not dramatic or emotional.
 - **Em dashes** — use them sparsely, always with spaces on both sides, not attached to words (British/web convention for screen readability)
 - **Periods and brackets** — when a parenthetical ends a sentence that began outside the brackets, the period goes outside: "This is an example (like this)." Not "(like this.)"
 - **Serial comma** — use it (red, white, and blue)
+- **Curly quotes for prose** — use " " and ' ' (curly/smart quotes) in prose text
+- **Straight quotes for code** — use " and ' (straight quotes) only in code blocks and inline code
 - **Double quotes** for scare quotes around terms being examined: "touching the DOM"
 
 #### Formatting
