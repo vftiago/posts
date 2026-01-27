@@ -12,7 +12,7 @@ If you’ve spent any amount of time with React, you’ve probably heard of the 
 
 A catchy if hand-wavy explanation. Also a bit misleading.
 
-The DOM isn't slow in the way people usually mean — JavaScript can execute DOM mutations very quickly. What's expensive is what the browser has to do after you mutate the DOM. React's Virtual DOM exists to manage those costs.
+The DOM isn’t slow in the way people usually mean — JavaScript can execute DOM mutations very quickly. What’s expensive is what the browser has to do after you mutate the DOM. React’s Virtual DOM exists to manage those costs.
 
 ## The DOM Is Not Just a JavaScript Object Tree
 
@@ -37,13 +37,13 @@ A DOM mutation can force the browser to do some or all of the following:
 
 These steps are typically far more expensive than the JavaScript that triggered them, and they can _cascade_: a change in one part of the DOM may affect layout elsewhere.
 
-The browser is smart and aggressively optimizes, but even when it knows a write only affects paint, it can't know the extent of the damage without doing the work, so it must pessimistically mark parts of the rendering pipeline as “dirty”. The cost isn’t the mutation itself — it’s the invalidation of rendering state.
+The browser is smart and aggressively optimizes, but even when it knows a write only affects paint, it can’t know the extent of the damage without doing the work, so it must pessimistically mark parts of the rendering pipeline as “dirty”. The cost isn’t the mutation itself — it’s the invalidation of rendering state.
 
 ## Why Many Small DOM Updates Are a Problem
 
 The classic performance issue isn’t “touching the DOM”, it’s touching it repeatedly, in small increments, while the browser observes every change.
 
-If you interleave DOM reads and writes (like reading an element's height, then setting it, then reading the next element's height, etc.), the browser may be forced to recalculate layout repeatedly, even though only the final state actually matters.
+If you interleave DOM reads and writes (like reading an element’s height, then setting it, then reading the next element’s height, etc.), the browser may be forced to recalculate layout repeatedly, even though only the final state actually matters.
 
 Experienced developers learned to work around this by batching writes, caching reads, and carefully ordering operations to avoid layout thrashing. It worked, but it was brittle and easy to get wrong.
 
@@ -51,19 +51,19 @@ React’s Virtual DOM formalizes this idea.
 
 ## What the Virtual DOM Actually Is
 
-React's Virtual DOM is a tree of plain JavaScript objects. It has no connection to layout, styles, or rendering. You can create it, throw it away, and compare it freely without triggering any browser rendering work. Only after it computes the final desired UI does it touch the real DOM.
+React’s Virtual DOM is a tree of plain JavaScript objects. It has no connection to layout, styles, or rendering. You can create it, throw it away, and compare it freely without triggering any browser rendering work. Only after it computes the final desired UI does it touch the real DOM.
 
 This indirection allows React to do three important things:
 
 1. **Batch updates** — Multiple state changes are grouped into a single DOM commit.
-2. **Avoid unnecessary writes** — If a piece of UI didn't change, React doesn't touch the corresponding DOM node.
+2. **Avoid unnecessary writes** — If a piece of UI didn’t change, React doesn’t touch the corresponding DOM node.
 3. **Minimize observable mutations** — The browser sees only the smallest required set of changes, not every intermediate state.
 
-The Virtual DOM isn't faster than the real DOM at mutation. It reduces total work by shielding the browser from noise.
+In other words, the Virtual DOM reduces total work by _shielding the browser from noise_.
 
 ## Why Diffing Is Usually Cheaper
 
-All the Virtual DOM operations (creating trees, comparing them, throwing them away) are plain JavaScript work. The expensive part is what happens when changes reach the browser's rendering pipeline.
+All the Virtual DOM operations (creating trees, comparing them, throwing them away) are plain JavaScript work. The expensive part is what happens when changes reach the browser’s rendering pipeline.
 
 React trades extra JavaScript work for a reduction in browser rendering work. For most applications with non-trivial UI complexity, that trade is a net win.
 
@@ -79,8 +79,8 @@ The Virtual DOM shines when:
 
 React’s real contribution isn’t raw performance. It’s making efficient DOM usage the default, instead of something developers have to constantly think about.
 
-A better way to phrase the original claim would be:
+A more precise way to phrase the original claim would be:
 
-> The DOM can be expensive to _observe changing_.
+> React uses a Virtual DOM because committing only the necessary changes to the real DOM keeps expensive browser rendering work to a minimum.
 
 The Virtual DOM exists to ensure the browser only sees the final, minimal set of changes that matter.
