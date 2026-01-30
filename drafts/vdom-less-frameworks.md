@@ -1,21 +1,23 @@
 ---
 title: "VDOM-less Approaches to Reactive UI"
-published: false
-description: React uses a Virtual DOM. Svelte compiles reactivity away. SolidJS uses fine-grained signals. How do these approaches differ, and when does each make sense?
+published: true
+description: React uses a Virtual DOM. Svelte and SolidJS use fine-grained signals. How do these approaches differ, and when does each make sense?
 tags: react, svelte, solidjs, javascript
 ---
 
 React, Svelte, and SolidJS solve the same fundamental problem: keeping the DOM in sync with application state. However, they take remarkably different approaches.
 
+_(NOTE: This comparison reflects React 19, Svelte 5, and SolidJS 1.x as of early 2026.)_
+
 - **React** — Diffs Virtual DOM trees at runtime
-- **Svelte** — Compiles reactive updates at build time
+- **Svelte** — Hybrid compile-time + signals approach (Svelte 5 adopted fine-grained reactivity)
 - **SolidJS** — Tracks fine-grained dependencies at runtime
 
 Each approach has tradeoffs. Understanding them helps you choose the right tool, or at least clarify why your current tool works the way it does.
 
 ## The Problem They All Solve
 
-DOM mutations aren’t slow. What’s slow is the browser work that follows: recalculating styles, recomputing layout, repainting pixels. Every mutation indicates to the browser that something might have changed.
+[DOM mutations aren’t slow](https://dev.to/vftiago/why-does-react-use-a-virtual-dom-1305). What’s slow is the browser work that follows: recalculating styles, recomputing layout, repainting pixels. Every mutation indicates to the browser that something might have changed.
 
 Naive approaches — updating the DOM directly on every state change — can trigger excessive browser work. The goal is to minimize unnecessary DOM operations while keeping the UI in sync with state.
 
@@ -38,7 +40,7 @@ When `count` changes:
 3. React diffs the new tree against the previous one
 4. Only the changed parts are applied to the real DOM
 
-This model is predictable: UI is a function of state. The tradeoff is that React must re-run the component and diff the result — even when the output is identical. React Compiler (introduced in React 19) can reduce unnecessary re-renders, but the fundamental model remains: re-run, diff, patch.
+This model is predictable: UI is a function of state. The tradeoff is that React must re-run the component and diff the result — even when the output is identical. React Compiler can reduce unnecessary re-renders, but the fundamental model remains: re-run, diff, patch.
 
 **Benefits:**
 
@@ -51,9 +53,9 @@ This model is predictable: UI is a function of state. The tradeoff is that React
 - Overhead from diffing, even with optimizations (negligible for most applications)
 - Runtime includes the reconciler and scheduler
 
-## Svelte: Compile-Time Reactivity
+## Svelte: Compile-Time + Fine-Grained Reactivity
 
-Svelte shifts work from runtime to build time. The compiler analyzes your code and generates vanilla JavaScript that updates the DOM directly (the example below uses Svelte 5 syntax):
+Svelte’s approach has evolved significantly. Before version 5, Svelte was purely compile-time: the compiler analyzed your code and generated vanilla JavaScript that updated the DOM directly. Svelte 5 adopts a hybrid approach, combining compile-time optimizations with SolidJS-style fine-grained signals called "[runes](https://svelte.dev/docs/svelte/v5-migration-guide#Reactivity-syntax-changes)":
 
 ```svelte
 <script>
@@ -65,18 +67,17 @@ Svelte shifts work from runtime to build time. The compiler analyzes your code a
 </button>
 ```
 
-The compiler sees that `count` is used in the button text and generates code that updates only that text node when `count` changes. There’s no diffing because there’s nothing to diff — the compiler knows at build time exactly which DOM nodes depend on which variables.
+The `$state` rune creates a signal under the hood. When `count` changes, only the specific DOM nodes that depend on it update — no diffing needed. This combines the ergonomics of Svelte’s original approach with the performance characteristics of fine-grained reactivity.
 
 **Benefits:**
 
-- Smallest runtime footprint
-- No diffing overhead
+- Fine-grained updates with minimal overhead
 - Less boilerplate than React
+- Better scaling with component count than pre-Svelte 5
 
 **Drawbacks:**
 
 - Uses `.svelte` files with custom syntax
-- Reactive dependencies must be statically analyzable
 - Smaller ecosystem than React
 
 ## SolidJS: Fine-Grained Signals
@@ -97,8 +98,8 @@ Components are setup functions, not render functions. They establish reactive re
 
 **Benefits:**
 
-- Near-Svelte performance with React-like syntax
-- No diffing overhead
+- React-like syntax
+- Automatic dependency tracking (also true of Svelte 5)
 - Fine-grained control over what updates
 
 **Drawbacks:**
@@ -110,17 +111,9 @@ Components are setup functions, not render functions. They establish reactive re
 
 ## Runtime Size
 
-The architectural differences show up in bundle size (minified + gzipped as of early 2026):
+The architectural differences show up in bundle size. React ships both the reconciler and scheduler. Svelte 5's runtime grew compared to earlier versions due to its signals system, but individual components compile smaller, improving scaling for larger applications. SolidJS ships a reactivity system but no diffing algorithm.
 
-| Framework        | Runtime Size |
-| ---------------- | ------------ |
-| React + ReactDOM | ~45kb        |
-| Svelte           | ~3kb         |
-| SolidJS          | ~7kb         |
-
-Svelte’s minimal runtime is possible because most work happens at compile time — the compiled output includes only the code your app actually uses. SolidJS ships a reactivity system but no diffing algorithm. React ships both the reconciler and scheduler.
-
-For small widgets or performance-critical applications, runtime size might matter. For typical SPAs, it’s often negligible compared to application code.
+For small widgets or performance-critical applications, runtime size might matter. For typical SPAs, it's often negligible compared to application code.
 
 ## Performance Characteristics
 
