@@ -6,7 +6,7 @@ This repository contains technical articles intended for publication on platform
 
 ## Framing
 
-Evaluate articles from the perspective of what a senior, experienced Software Engineer would want to hear when asking deep technical questions in an interview. The standard is not "technically not wrong" but "demonstrates genuine understanding."
+Evaluate articles from the perspective of what a senior, experienced Software Engineer would want to hear when asking deep technical questions in an interview. The standard is not "technically not wrong" but "demonstrates genuine understanding". Challenge every assumption. Meticulously scrutinize the text for technical accuracy, ambiguity, and outdated assumptions or statements, as if your Principal Software Engineer boss was going to evaluate it looking for any excuse to fire you.
 
 This means:
 
