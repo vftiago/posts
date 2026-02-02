@@ -3,6 +3,7 @@ title: Frontend Coding Challenge — Chat-Like Interface (Part 2)
 published: false
 description: Walking through a hypothetical frontend live coding challenge step-by-step.
 tags: react, interview, frontend
+cover_image:
 ---
 
 _This is Part 2 of a two-part series. [Part 1](/) covered requirements analysis, architecture decisions, and sending messages._
@@ -11,29 +12,11 @@ The remaining functionality is the jump links: clicking "Jump to First" or "Jump
 
 ## Scrolling to a Specific Message
 
-We need a way to reference individual message elements. There are two reasonable approaches:
-
-1. **Refs** — Store refs and attach them during render
-2. **DOM query** — Use `querySelector` to find the element when needed
-
-Option 1 is more idiomatic in React. Option 2 requires less setup (no ref management) and works fine for this use case. We'll use data attributes and `querySelector`:
-
-```tsx
-<div
-  key={message.id}
-  data-message-id={message.id}
-  className={highlightedId === message.id ? "message highlighted" : "message"}
->
-  {message.text}
-</div>
-```
-
-Then to scroll to a message:
+Part 1 introduced `messageRefs`, a Map storing refs to each message element. The same Map that powers auto-scroll also enables jumping to any message:
 
 ```typescript
 const jumpToMessage = (id: number) => {
-  const element = document.querySelector(`[data-message-id="${id}"]`);
-  element?.scrollIntoView({ behavior: "smooth" });
+  messageRefs.current.get(id)?.scrollIntoView({ behavior: "smooth" });
 };
 ```
 
@@ -52,8 +35,7 @@ When we jump to a message, we also need to highlight it:
 
 ```typescript
 const jumpToMessage = (id: number) => {
-  const element = document.querySelector(`[data-message-id="${id}"]`);
-  element?.scrollIntoView({ behavior: "smooth" });
+  messageRefs.current.get(id)?.scrollIntoView({ behavior: "smooth" });
   setHighlightedId(id);
 };
 ```
@@ -72,8 +54,7 @@ The highlight should disappear after 1 second. A first attempt:
 
 ```typescript
 const jumpToMessage = (id: number) => {
-  const element = document.querySelector(`[data-message-id="${id}"]`);
-  element?.scrollIntoView({ behavior: "smooth" });
+  messageRefs.current.get(id)?.scrollIntoView({ behavior: "smooth" });
   setHighlightedId(id);
 
   setTimeout(() => {
@@ -90,8 +71,7 @@ We need to cancel the previous timeout when starting a new one. A ref can hold t
 const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 const jumpToMessage = (id: number) => {
-  const element = document.querySelector(`[data-message-id="${id}"]`);
-  element?.scrollIntoView({ behavior: "smooth" });
+  messageRefs.current.get(id)?.scrollIntoView({ behavior: "smooth" });
   setHighlightedId(id);
 
   if (highlightTimeoutRef.current !== null) {
@@ -108,7 +88,7 @@ Now clicking a new jump link cancels the previous timeout, and only the latest h
 
 ## Cleanup on Unmount
 
-If the component unmounts while a timeout is pending, the callback would still fire and attempt to do unnecessary work. A cleanup effect prevents this:
+If the component unmounts while a timeout is pending, the callback would still fire and call `setHighlightedId(null)` on an unmounted component. In React 18+ this is silently ignored, but it's still a wasted call — and in older React versions it produced a warning. A cleanup effect prevents this:
 
 ```typescript
 useEffect(() => {
@@ -120,7 +100,7 @@ useEffect(() => {
 }, []);
 ```
 
-The empty dependency array means the effect body runs once on mount, and the returned cleanup function runs on unmount.
+The empty dependency array means the effect body runs once after the initial render, and the returned cleanup function runs on unmount.
 
 ---
 
@@ -139,72 +119,15 @@ All requirements are now implemented:
 - ✓ Auto-focus input on load (nice-to-have)
 - ✓ Send with Enter key (nice-to-have)
 
-## Trade-offs
-
-Several decisions prioritized simplicity over ideal design:
-
-**Single component** — Everything lives in `App`. For a production codebase, we'd extract `MessageList`, `Message`, `JumpLinks`, and `MessageInput` as separate components with clear props interfaces. This improves testability and reusability.
-
-**DOM query for scrolling** — Using `querySelector` with data attributes bypasses React's ref system. A more React-idiomatic approach would store refs in a Map:
-
-```tsx
-const messageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
-
-{
-  messages.map((message) => (
-    <div
-      key={message.id}
-      ref={(el) => {
-        if (el) {
-          messageRefs.current.set(message.id, el);
-        } else {
-          messageRefs.current.delete(message.id);
-        }
-      }}
-    >
-      {message.text}
-    </div>
-  ));
-}
-
-// Then to scroll:
-messageRefs.current.get(id)?.scrollIntoView({ behavior: "smooth" });
-```
-
-The `if (el)` check handles a React behavior: ref callbacks are called with the DOM element on mount and with `null` on unmount, allowing the Map to stay in sync with the DOM.
-
-Since our requirements only call for jumping to first and last, we could use two dedicated refs instead of a Map. But the Map approach is no more complex than managing two refs and would scale naturally if requirements expanded to include additional jump targets — the same reasoning we applied to `highlightedId` in Part 1.
-
-**No TypeScript interface for messages** — We rely on type inference for the message shape. Defining an explicit type makes the contract clearer:
-
-```typescript
-type Message = {
-  id: number;
-  text: string;
-};
-```
-
 ## What We'd Improve
 
 Given more time, these changes would make the code production-ready:
 
 **Extract components** — Separate concerns into focused components with clear props.
 
-**Use refs instead of DOM queries** — The Map-based ref pattern shown above is more type-safe and doesn't rely on the DOM structure matching our expectations.
+**Handle empty state** — If this component were extended to support message deletion, we'd want to show an empty state and disable the jump buttons when there are no messages. The `messageRefs` Map already handles deletion cleanly via the callback ref's `null` branch.
 
-**Handle empty state** — If this component were extended to support message deletion, we'd want to show an empty state and disable the jump buttons when there are no messages. The Map-based ref pattern shown above would also handle this cleanly, removing refs as messages are deleted.
-
-**Accessibility** — Add ARIA labels to the jump links, ensure proper focus management after scrolling, and announce new messages to screen readers.
-
-**CSS transitions** — The highlight appears and disappears instantly. A fade-out transition would be smoother:
-
-```css
-.message {
-  transition: background-color 0.3s ease;
-}
-```
-
-**Scroll behavior edge case** — If the user is reading older messages and a new message arrives, auto-scrolling to the bottom might be disruptive. A production chat would detect if the user has scrolled up and show a "New messages" indicator instead.
+**Accessibility** — Move focus to the target message after jumping, and use an `aria-live` region to announce new messages to screen readers.
 
 ---
 
@@ -226,16 +149,12 @@ function App() {
   const [highlightedId, setHighlightedId] = useState<number | null>(null);
   const [inputValue, setInputValue] = useState("");
 
-  const listRef = useRef<HTMLDivElement>(null);
+  const messageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (listRef.current) {
-      listRef.current.scrollTo({
-        top: listRef.current.scrollHeight,
-        behavior: "smooth",
-      });
-    }
+    const lastId = messages.length - 1;
+    messageRefs.current.get(lastId)?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   useEffect(() => {
@@ -247,20 +166,18 @@ function App() {
   }, []);
 
   const handleSend = () => {
-    if (!inputValue.trim()) return;
+    const trimmed = inputValue.trim();
 
-    const newMessage = {
-      id: messages.length,
-      text: inputValue.trim(),
-    };
+    if (!trimmed) {
+      return;
+    }
 
-    setMessages([...messages, newMessage]);
+    setMessages((prev) => [...prev, { id: prev.length, text: trimmed }]);
     setInputValue("");
   };
 
   const jumpToMessage = (id: number) => {
-    const element = document.querySelector(`[data-message-id="${id}"]`);
-    element?.scrollIntoView({ behavior: "smooth" });
+    messageRefs.current.get(id)?.scrollIntoView({ behavior: "smooth" });
     setHighlightedId(id);
 
     if (highlightTimeoutRef.current !== null) {
@@ -279,11 +196,17 @@ function App() {
         <button onClick={() => jumpToMessage(messages.length - 1)}>Jump to Last</button>
       </div>
 
-      <div className="message-list" ref={listRef}>
+      <div className="message-list">
         {messages.map((message) => (
           <div
             key={message.id}
-            data-message-id={message.id}
+            ref={(node) => {
+              if (node) {
+                messageRefs.current.set(message.id, node);
+              } else {
+                messageRefs.current.delete(message.id);
+              }
+            }}
             className={highlightedId === message.id ? "message highlighted" : "message"}
           >
             {message.text}
@@ -341,6 +264,7 @@ export default App;
   margin-bottom: 8px;
   background: #f5f5f5;
   border-radius: 4px;
+  transition: background-color 0.3s ease;
 }
 
 .message.highlighted {

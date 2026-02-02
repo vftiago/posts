@@ -3,13 +3,14 @@ title: Frontend Coding Challenge — Chat-Like Interface (Part 1)
 published: false
 description: Walking through a hypothetical frontend live coding challenge step-by-step.
 tags: react, interview, frontend
+cover_image:
 ---
 
-This is the first of two posts where I walk through a hypothetical frontend coding challenge from the perspective of the interviewee, focusing on not just the code, but the reasoning that leads to it.
+This is the first of two posts where I walk through a hypothetical frontend live coding challenge from the perspective of the interviewee, focusing on not just the code, but the reasoning that leads to it.
 
 ## The Challenge
 
-In this frontend coding challenge, we're going to build a chat-like interface with a scrollable message list, an input field, a send button, and two "jump to message" links.
+Build a chat-like interface with a scrollable message list, an input field, a send button, and two "jump to message" links.
 
 **Constraints**
 
@@ -41,7 +42,7 @@ Straightforward. We need initial data, which can be simple strings or objects wi
 
 **"The list scrolls to the bottom when a new message is added"**
 
-This tells us something about the UI structure. For a container to scroll vertically, its computed height must be less than the height of its content, and it needs to have `overflow-y: auto` or `overflow-y: scroll`. If the container grew to fit its content, there would be nothing to scroll to. This means we're building a fixed-height scrollable area, not a page that grows infinitely — a layout decision implied by this requirement.
+This tells us something about the UI structure. For a container to scroll vertically, its computed height must be less than the height of its content, and it needs to have `overflow-y: auto` or `overflow-y: scroll`. If the container grew to fit its content, there would be nothing to scroll to. This means we're building a fixed-height scrollable area — a layout decision implied by this requirement.
 
 **"Links allow jumping to the first and last messages"**
 
@@ -87,22 +88,15 @@ State lives in `App`:
 - `highlightedId` — which message is highlighted (or `null`)
 - `inputValue` — controlled input state
 
-We'll need refs for scrolling:
-
-- A ref to the message list container (to scroll to bottom)
-- A way to reference messages by ID (to scroll specific ones into view)
-
 ## Environment Setup
 
-For a quick React setup, Vite requires minimal configuration and provides fast hot module replacement:
+We're free to use whatever we want. For a quick React setup, Vite requires minimal configuration and gives us a working React + TypeScript project with fast hot module replacement in seconds:
 
 ```bash
 npm create vite@latest chat-interface -- --template react-ts
 ```
 
-This gives us a working React + TypeScript project in seconds. TypeScript is optional, but the autocompletion and type checking help catch errors early, and Vite's template requires no additional setup.
-
----
+TypeScript is optional, but the autocompletion and type checking help catch errors early, and Vite's template requires no additional setup.
 
 ## Architecture Decisions
 
@@ -160,13 +154,11 @@ Options for styling in React without external libraries:
 2. **CSS file** — Traditional stylesheet, imported into the component
 3. **CSS Modules** — Scoped class names, supported by Vite out of the box
 
-Inline styles are tempting for a quick exercise, but they have limitations: no pseudo-classes (`:hover`), no media queries, and verbose syntax. A plain CSS file is simpler and sufficient for this scope.
-
 Vite's template includes an `App.css` file, so we'll use that. We can also delete `index.css` and remove its import from `main.tsx` — Vite's default styles may interfere with our layout, and starting with a blank slate is simpler than debugging style conflicts.
 
 ### Initial Scaffold
 
-We'll replace Vite's counter example with our scaffold:
+We'll replace Vite's boilerplate with our scaffold:
 
 ```tsx
 import { useState } from "react";
@@ -240,6 +232,7 @@ And the corresponding CSS:
   margin-bottom: 8px;
   background: #f5f5f5;
   border-radius: 4px;
+  transition: background-color 0.3s ease;
 }
 
 .message.highlighted {
@@ -260,11 +253,9 @@ And the corresponding CSS:
 
 This renders a functional layout with all the visual elements in place. Nothing is wired up yet — the buttons don't do anything, and the Send button doesn't add messages — but the structure is there, and we can verify the scroll container works by inspecting it in the browser.
 
----
-
 ## Sending Messages
 
-With the scaffold in place, we can start wiring up functionality. This section covers sending messages and auto-scrolling, which together form the core interaction.
+With the scaffold in place, we can start wiring up functionality.
 
 ### The Send Handler
 
@@ -278,52 +269,65 @@ When the user clicks "Send", we need to:
 
 ```typescript
 const handleSend = () => {
-  if (!inputValue.trim()) return;
+  const trimmed = inputValue.trim();
 
-  const newMessage = {
-    id: messages.length,
-    text: inputValue.trim(),
-  };
+  if (!trimmed) {
+    return;
+  }
 
-  setMessages([...messages, newMessage]);
+  setMessages((prev) => [...prev, { id: prev.length, text: trimmed }]);
   setInputValue("");
 };
 ```
 
-The `trim()` call handles inputs that are only whitespace. Using `messages.length` for the ID works because IDs are 0-indexed (matching array indices) and we never delete messages — IDs will always be unique and sequential.
+The `trim()` call handles inputs that are only whitespace. Using `prev.length` for the ID works because IDs are 0-indexed (matching array indices) and we never delete messages — IDs will always be unique and sequential.
+
+Note the functional update form `setMessages((prev) => ...)`. This pattern derives the next state from the previous state, rather than from the `messages` variable captured in the closure. In this specific case it doesn't matter — user-initiated clicks can't race — but it's a good habit. If `handleSend` were called programmatically in quick succession, the closure-based version could produce duplicate IDs because each call would read the same stale `messages` value.
 
 ### Auto-Scroll to Bottom
 
-After adding a message, the list should scroll to show it. We need a ref to the scrollable container:
+After adding a message, the list should scroll to show it. We also need refs to scroll specific messages into view for the jump links. A single data structure handles both: a Map storing refs to each message element by ID.
 
 ```typescript
-const listRef = useRef<HTMLDivElement>(null);
+const messageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
 ```
 
-Attach it to the message list:
+To populate the Map, we use callback refs. When you pass a function to `ref` instead of a ref object, React calls it with the DOM element when the element mounts and with `null` when it unmounts. With inline functions, React detects that the function identity changes on each render; when this happens, it calls the _old_ callback with `null`, then the _new_ callback with the element. This sounds problematic, but it's safe here because `message.id` is stable for each element — even if the old callback runs its delete logic, it deletes the correct key, and the new callback immediately re-adds it:
 
 ```tsx
-<div className="message-list" ref={listRef}>
+{
+  messages.map((message) => (
+    <div
+      key={message.id}
+      ref={(node) => {
+        if (node) {
+          messageRefs.current.set(message.id, node);
+        } else {
+          messageRefs.current.delete(message.id);
+        }
+      }}
+      className={highlightedId === message.id ? "message highlighted" : "message"}
+    >
+      {message.text}
+    </div>
+  ));
+}
 ```
 
-Now we need to scroll after messages update. Calling `scrollTo` right after `setMessages` won't work because React batches state updates and commits them to the DOM after the render cycle completes — the new message won't be in the DOM yet.
+Now we can scroll any message into view by its ID. For auto-scroll, we want to scroll to the last message whenever the list changes. Calling `scrollIntoView` right after `setMessages` won't work because React batches state updates and commits them to the DOM after the render cycle completes — the new message won't be in the DOM yet.
 
 We need `useEffect` to run after the render:
 
 ```typescript
 useEffect(() => {
-  if (listRef.current) {
-    listRef.current.scrollTo({
-      top: listRef.current.scrollHeight,
-      behavior: "smooth",
-    });
-  }
+  const lastId = messages.length - 1;
+  messageRefs.current.get(lastId)?.scrollIntoView({ behavior: "smooth" });
 }, [messages]);
 ```
 
-This runs whenever `messages` changes. `scrollHeight` is the total height of the content, so scrolling to it puts us at the bottom.
+This runs whenever `messages` changes. Since IDs are 0-indexed and sequential, `messages.length - 1` gives us the last message's ID.
 
-One subtlety: this effect also runs on initial render with the 9 hardcoded messages. That's fine — starting scrolled to the bottom is reasonable for a chat-like interface.
+One subtlety: this effect also runs on initial render with the 9 hardcoded messages. With `behavior: "smooth"`, users see an animated scroll on page load. Whether that's desirable is a UX judgment call — some would prefer `behavior: "instant"` for the initial render, or skipping the scroll entirely. For a timed exercise, the current behavior is acceptable and doesn't contradict the requirements.
 
 ### Simplifying with a Form
 
@@ -368,26 +372,21 @@ function App() {
   const [highlightedId, setHighlightedId] = useState<number | null>(null);
   const [inputValue, setInputValue] = useState("");
 
-  const listRef = useRef<HTMLDivElement>(null);
+  const messageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
 
   useEffect(() => {
-    if (listRef.current) {
-      listRef.current.scrollTo({
-        top: listRef.current.scrollHeight,
-        behavior: "smooth",
-      });
-    }
+    const lastId = messages.length - 1;
+    messageRefs.current.get(lastId)?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   const handleSend = () => {
-    if (!inputValue.trim()) return;
+    const trimmed = inputValue.trim();
 
-    const newMessage = {
-      id: messages.length,
-      text: inputValue.trim(),
-    };
+    if (!trimmed) {
+      return;
+    }
 
-    setMessages([...messages, newMessage]);
+    setMessages((prev) => [...prev, { id: prev.length, text: trimmed }]);
     setInputValue("");
   };
 
@@ -398,9 +397,19 @@ function App() {
         <button>Jump to Last</button>
       </div>
 
-      <div className="message-list" ref={listRef}>
+      <div className="message-list">
         {messages.map((message) => (
-          <div key={message.id} className={highlightedId === message.id ? "message highlighted" : "message"}>
+          <div
+            key={message.id}
+            ref={(node) => {
+              if (node) {
+                messageRefs.current.set(message.id, node);
+              } else {
+                messageRefs.current.delete(message.id);
+              }
+            }}
+            className={highlightedId === message.id ? "message highlighted" : "message"}
+          >
             {message.text}
           </div>
         ))}
@@ -429,8 +438,10 @@ function App() {
 export default App;
 ```
 
-The jump links still don't work, and `highlightedId` isn't being set anywhere. That's next.
+The jump links still don't work, and `highlightedId` isn't being set anywhere — but the `messageRefs` Map is ready to support them.
+
+That's next.
 
 ---
 
-_Next: [Part 2 — Jump, Highlight & Retrospective](/)_
+_Next: [Part 2 — Jump, Highlight & Final Code](/)_
