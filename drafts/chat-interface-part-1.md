@@ -444,4 +444,4 @@ That's next.
 
 ---
 
-_Next: [Part 2 — Jump, Highlight & Final Code](/)_
+_Next: [Part 2 — Jump, Highlight & Final Code](https://dev.to/vftiago/frontend-coding-challenge-chat-like-interface-part-2-1phe)_

@@ -6,13 +6,13 @@ tags: react, interview, frontend
 cover_image:
 ---
 
-_This is Part 2 of a two-part series. [Part 1](/) covered requirements analysis, architecture decisions, and sending messages._
+_This is Part 2 of a two-part series. [Part 1](https://dev.to/vftiago/frontend-coding-challenge-chat-like-interface-part-1-262g) covered requirements analysis, architecture decisions, and sending messages._
 
-The remaining functionality is the jump links: clicking "Jump to First" or "Jump to Last" should scroll that message into view and highlight it for 1 second.
+Now we need to wire up the jump links: clicking "Jump to First" or "Jump to Last" should scroll that message into view and highlight it for 1 second.
 
 ## Scrolling to a Specific Message
 
-Part 1 introduced `messageRefs`, a Map storing refs to each message element. The same Map that powers auto-scroll also enables jumping to any message:
+We already implemented `messageRefs`, a Map storing refs to each message element. The same Map that powers auto-scroll also enables jumping to any message:
 
 ```typescript
 const jumpToMessage = (id: number) => {
@@ -20,7 +20,7 @@ const jumpToMessage = (id: number) => {
 };
 ```
 
-Wire up the buttons. Since we're using 0-based IDs (matching array indices), the first message has ID `0` and the last has ID `messages.length - 1`:
+Since we're using 0-based IDs (matching array indices), the first message has ID `0` and the last has ID `messages.length - 1`:
 
 ```tsx
 <div className="jump-links">
@@ -121,7 +121,7 @@ All requirements are now implemented:
 
 ## What We'd Improve
 
-Given more time, these changes would make the code production-ready:
+We could consider the following improvement points in order to deliver more robust, production-ready code:
 
 **Extract components** — Separate concerns into focused components with clear props.
 
@@ -289,4 +289,4 @@ This exercise demonstrates a common pattern in live coding challenges: balancing
 
 ---
 
-_Previous: [Part 1 — Understanding the Requirements and Basic Structure](/)_
+_Previous: [Part 1 — Understanding the Requirements and Basic Structure](https://dev.to/vftiago/frontend-coding-challenge-chat-like-interface-part-1-262g)_
