@@ -192,8 +192,7 @@ The tone should be technical and measured, not dramatic or emotional.
 - **Em dashes** — use them sparsely, always with spaces on both sides, not attached to words (British/web convention for screen readability)
 - **Periods and brackets** — when a parenthetical ends a sentence that began outside the brackets, the period goes outside: "This is an example (like this)." Not "(like this.)"
 - **Serial comma** — use it (red, white, and blue)
-- **Curly quotes for prose** — use " " and ' ' (curly/smart quotes) in prose text
-- **Straight quotes for code** — use " and ' (straight quotes) only in code blocks and inline code
+- **Straight quotes everywhere** — avoid curly quotes, use " and ' (straight quotes) everywhere.
 - **Double quotes** for scare quotes around terms being examined: "touching the DOM"
 
 #### Formatting
