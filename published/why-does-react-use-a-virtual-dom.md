@@ -1,9 +1,9 @@
 ---
 title: Why Does React Use a Virtual DOM?
-published: false
-description: A practical look at what the Virtual DOM really is, why direct DOM manipulation isn't inherently slow, what React is actually optimizing for, and how other frameworks solve the same problem differently.
-tags: react, dom, vdom, signals
-cover_image: https://dev-to-uploads.s3.amazonaws.com/uploads/articles/wjelgova6jn3h8h8ci01.jpg
+published: true
+description: A practical look at what the Virtual DOM really is, why direct DOM manipulation isn’t inherently slow, and what React is actually optimizing for.
+tags: react, dom, vdom, javascript
+cover_image: https://dev-to-uploads.s3.amazonaws.com/uploads/articles/aop2r76m1f5z4i1l5fya.jpg
 ---
 
 If you've spent any amount of time with React, you've probably heard of the Virtual DOM (or VDOM for short) as well as some version of this claim:

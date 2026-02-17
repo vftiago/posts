@@ -1,8 +1,9 @@
 ---
 title: Five JavaScript Interview Questions Answered in Depth
-published: false
+published: true
 description: Short answers and deep dives into key-value data structures, type coercion, pass by value, closures, and garbage collection in JavaScript.
 tags: [javascript, interview]
+cover_image: https://dev-to-uploads.s3.amazonaws.com/uploads/articles/9h8l7y1j5n2s0v6zqj8c.png
 ---
 
 The following five questions come up regularly in technical interviews where JavaScript is involved, usually early on as a way to gauge foundational understanding. Each one has a short answer — a sentence or two that demonstrates you know the concept — but the depth behind that answer is what distinguishes a rehearsed response from genuine understanding.

@@ -1,9 +1,9 @@
 ---
 title: Frontend Coding Challenge — Chat-Like Interface (Part 1)
-published: false
+published: true
 description: Walking through a hypothetical frontend live coding challenge step-by-step.
 tags: react, interview, frontend
-cover_image:
+cover_image: https://dev-to-uploads.s3.amazonaws.com/uploads/articles/d63rofz40vqzfd8na3gq.jpg
 ---
 
 This is the first of two posts where I walk through a hypothetical frontend live coding challenge from the perspective of the interviewee, focusing on not just the code, but the reasoning that leads to it.

@@ -1,9 +1,9 @@
 ---
 title: Frontend Coding Challenge — Chat-Like Interface (Part 2)
-published: false
+published: true
 description: Walking through a hypothetical frontend live coding challenge step-by-step.
 tags: react, interview, frontend
-cover_image:
+cover_image: https://dev-to-uploads.s3.amazonaws.com/uploads/articles/g96s7mx6ngcmxeveobxv.jpg
 ---
 
 _This is Part 2 of a two-part series. [Part 1](https://dev.to/vftiago/frontend-coding-challenge-chat-like-interface-part-1-262g) covered requirements analysis, architecture decisions, and sending messages._
