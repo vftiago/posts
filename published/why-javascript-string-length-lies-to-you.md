@@ -1,8 +1,9 @@
 ---
 title: Why JavaScript String Length Lies to You
-published: false
+published: true
 description: Understanding code points, code units, and grapheme clusters — and why naive string truncation can corrupt your text.
 tags: [javascript, unicode, strings, frontend]
+cover_image: https://dev-to-uploads.s3.amazonaws.com/uploads/articles/lmk4nzqidm27or6ri464.jpg
 ---
 
 If you've ever truncated a string in JavaScript and ended up with garbled characters or broken emoji, you've encountered one of the language's most subtle gotchas: JavaScript strings don't work the way most developers assume they do.
@@ -17,7 +18,7 @@ function truncate(str, maxLength) {
 
 This works fine for basic ASCII text. But pass it a string containing emoji — `"Hello 👋 world"` — and slice at the wrong position, and you might end up with a corrupted character that displays as `�` or breaks downstream systems entirely.
 
-To understand why, we need to distinguish between three concepts: _code points_, _code units_, and _grapheme clusters_. JavaScript's most familiar string APIs — `.length`, indexing, `.slice()` — operate on code units, but developers often expect them to correspond to the visual units they see on screen. They frequently don't: what appears as a single character might be stored as two, four, or even more code units internally. A code point within the Basic Multilingual Plane fits in one code unit, but code points outside it — including most emoji — require two, and a single visual character like a flag can itself comprise multiple code points.
+To understand why, we need to distinguish between three concepts: _code points_, _code units_, and _grapheme clusters_. JavaScript's most familiar string APIs — `.length`, indexing, `.slice()` — operate on code units, but developers often expect them to correspond to the visual units they see on screen. They frequently don't: what appears as a single character might be stored as two, four, or even more code units internally.
 
 ## How Text Is Represented in Unicode
 
@@ -29,23 +30,23 @@ Code points are the logical unit of text. When we think about "characters" in hu
 
 ### Code Units
 
-A _code unit_ is the physical unit of storage in a particular encoding scheme. Different encodings use different code unit sizes: UTF-8 uses 8-bit code units, UTF-32 uses 32-bit code units, and UTF-16 — the encoding JavaScript uses internally — uses 16-bit code units.
+A _code unit_ is the minimal bit combination used to represent a single unit of encoded text in a particular encoding scheme. Different encodings use different code unit sizes: UTF-8 uses 8-bit code units, UTF-32 uses 32-bit code units, and UTF-16 — the encoding JavaScript uses internally — uses 16-bit code units.
 
 Here's where the complexity begins. The Unicode codespace extends to 0x10FFFF (over 1.1 million possible code points), but a 16-bit code unit can only represent values from 0 to 0xFFFF (65,536 values). This means UTF-16 cannot represent every code point with a single code unit.
 
-Unicode solves this by dividing the codespace into two regions:
+Whether a code point can be encoded as a single UTF-16 code unit depends on its position in the codespace:
 
 1. **The [Basic Multilingual Plane](<https://en.wikipedia.org/wiki/Plane_(Unicode)#Basic_Multilingual_Plane>) (BMP)** — Code points U+0000 to U+FFFF. These fit in a single 16-bit code unit. This includes most common characters: Latin alphabets, Cyrillic, Greek, Chinese, Japanese, Korean, and many symbols.
 
 2. **Supplementary Planes** — Code points U+10000 to U+10FFFF. These require two 16-bit code units, called a _surrogate pair_. This includes emoji, mathematical symbols, historic scripts, and rare CJK characters.
 
-A surrogate pair consists of a _high surrogate_ (U+D800 to U+DBFF) followed by a _low surrogate_ (U+DC00 to U+DFFF). These ranges are reserved specifically for this purpose — they don't represent any characters on their own.
+A [surrogate pair](https://www.unicode.org/faq/utf_bom.html#utf16-2) consists of a _high surrogate_ (U+D800 to U+DBFF) followed by a _low surrogate_ (U+DC00 to U+DFFF). These ranges are reserved specifically for this purpose — they don't represent any characters on their own.
 
 For example, the emoji "😀" (U+1F600) is encoded in UTF-16 as the surrogate pair `\uD83D\uDE00`.
 
 ### Grapheme Clusters
 
-A _grapheme cluster_ is what users perceive as a single visual character. This is defined by Unicode Standard Annex #29 as "the text between grapheme cluster boundaries" — essentially, the smallest unit of text that makes sense to a human reader.
+A _grapheme cluster_ is what users perceive as a single visual character — the smallest unit of text that a human reader would identify as a distinct character. [Unicode Standard Annex #29](https://www.unicode.org/reports/tr29/) defines the rules for determining grapheme cluster boundaries.
 
 The critical insight is that a grapheme cluster can consist of _multiple code points_. Some examples:
 
@@ -59,7 +60,7 @@ The critical insight is that a grapheme cluster can consist of _multiple code po
 
 ## What JavaScript Actually Does
 
-JavaScript strings are sequences of 16-bit code units. The ECMAScript specification is explicit about this: "The String type is the set of all ordered sequences of zero or more 16-bit unsigned integer values."
+JavaScript strings are sequences of 16-bit values. The [ECMAScript specification](https://tc39.es/ecma262/#sec-ecmascript-language-types-string-type) is explicit about this — it defines a String value as "a finite ordered sequence of zero or more 16-bit unsigned integer values." In practice, JavaScript treats these values as UTF-16 code units — methods like `codePointAt()` decode surrogate pairs accordingly.
 
 This design decision has cascading consequences across the entire string API.
 
@@ -94,8 +95,6 @@ The `.slice()` and `.substring()` methods use code unit indices:
 "😀😀".slice(0, 3); // "😀\uD83D" — corrupted: complete emoji + orphan surrogate
 ```
 
-That third example is the source of the truncation bug. Slicing at position 3 cuts a surrogate pair in half, producing an invalid sequence that contains an orphan high surrogate.
-
 ## Why This Causes Real Bugs
 
 When you naively truncate user-generated content — say, for a preview or database field limit — you risk:
@@ -104,7 +103,7 @@ When you naively truncate user-generated content — say, for a preview or datab
 
 2. **Broken emoji** — A flag like 🇬🇧 sliced in the middle becomes two separate regional indicators that may render as boxed letters or not render at all.
 
-3. **Encoding failures** — Some systems reject strings containing orphan surrogates. Protocol buffers, for instance, require valid UTF-8, and an orphan surrogate cannot be validly encoded in UTF-8.
+3. **Encoding failures** — Some systems reject strings containing orphan surrogates. [Protocol buffers](https://protobuf.dev/programming-guides/proto3/#scalar), for instance, require valid UTF-8, and an orphan surrogate cannot be validly encoded in UTF-8 (surrogates are not valid Unicode scalar values).
 
 4. **Character count mismatches** — If your UI shows "12/100 characters" but counts code units while displaying graphemes, users will be confused when some emoji count as 2 or 4 or 8.
 
@@ -122,14 +121,14 @@ function truncateCodePoints(str, maxCodePoints) {
 truncateCodePoints("😀😀😀", 2); // "😀😀" — two code points
 ```
 
-The spread operator uses the string's `Symbol.iterator`, which iterates by code point rather than code unit. Surrogate pairs are kept together.
+The spread syntax uses the string's [`Symbol.iterator`](https://tc39.es/ecma262/#sec-string.prototype-@@iterator), which iterates by code point rather than code unit. Surrogate pairs are kept together.
 
 However, this still doesn't handle grapheme clusters. Flag emoji and ZWJ sequences will still be split:
 
 ```javascript
-truncateCodePoints("🇬🇧🇫🇷", 2); // "🇬🇧" — appears correct, but only by luck
+truncateCodePoints("🇬🇧🇫🇷", 2); // "🇬🇧" — works because each flag is exactly two code points
 truncateCodePoints("🇬🇧🇫🇷", 3); // "🇬🇧🇫" — split the French flag, shows GB flag + unpaired F indicator
-truncateCodePoints("👨‍👩‍👧", 3); // "👨‍👩" — split the family, shows man + ZWJ + woman
+truncateCodePoints("👨‍👩‍👧", 3); // "👨‍👩" — split the family, rendering varies by platform
 ```
 
 ### Grapheme-Safe Truncation
@@ -148,27 +147,17 @@ function truncateGraphemes(str, maxGraphemes) {
 
 truncateGraphemes("🇬🇧🇫🇷", 1); // "🇬🇧" — one grapheme cluster
 truncateGraphemes("👨‍👩‍👧👨‍👩‍👧", 1); // "👨‍👩‍👧" — one grapheme cluster
-truncateGraphemes("Hello 👋🏽", 6); // "Hello " — six graphemes (space is one)
+truncateGraphemes("Hello 👋🏽", 6); // "Hello " — six graphemes (the space counts)
 truncateGraphemes("Hello 👋🏽", 7); // "Hello 👋🏽" — seven graphemes
 ```
 
-`Intl.Segmenter` has been available in all major browsers since April 2024 (Baseline 2024).
-
-### Choosing the Right Approach
-
-The right truncation strategy depends on your constraints:
-
-- **Code unit truncation** (`slice`) — Use when you have strict storage constraints (database column limits, protocol constraints) and can handle the visual artifacts downstream. You'll need to validate that you haven't created orphan surrogates.
-
-- **Code point truncation** (spread + slice) — Use when you need valid Unicode sequences but don't need precise grapheme boundaries. Faster than `Intl.Segmenter` and sufficient for many use cases.
-
-- **Grapheme truncation** (`Intl.Segmenter`) — Use when displaying to users or when character count must match user expectations. This is the only approach that handles all edge cases correctly.
+`Intl.Segmenter` has been available in all major browsers since April 2024 ([Baseline Newly available](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/Segmenter)) and in Node.js since v16.
 
 ## Key Takeaways
 
 > JavaScript strings are sequences of UTF-16 code units. The `.length` property, indexing, and methods like `.slice()` all operate on code units — not code points or grapheme clusters.
 
-This mismatch between JavaScript's internal representation and human intuition about "characters" is a frequent source of bugs. Any code that assumes `.length` returns the number of visible characters, or that slicing at an arbitrary index produces valid text, is potentially broken for input containing emoji or other characters outside the Basic Multilingual Plane.
+This mismatch between JavaScript's internal representation and human intuition about "characters" is a frequent source of bugs. Any code that assumes `.length` returns the number of visible characters, or that slicing at an arbitrary index produces valid text, is potentially broken for input containing emoji, combining marks, or any other text where a single visual character spans multiple code units or code points.
 
 The safest approach is to treat strings as opaque sequences when possible, use `[...str]` iteration when you need code point access, and reach for `Intl.Segmenter` when you need to match user-perceived character boundaries.
 
