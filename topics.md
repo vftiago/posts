@@ -30,6 +30,18 @@ Candidate topics extracted from ambiguities flagged in other articles.
 
 - **What problem do React state management libraries solve?** — What gaps in React's built-in state primitives do libraries like Redux and Zustand address? Potential spin-off comparing specific libraries (Redux, Zustand, and a third) if the main article gets too long.
 
+- **Fan-out patterns in distributed systems** — Strategies for distributing data from a single source to many consumers, including pub/sub, CDN edge distribution, and push vs pull tradeoffs.
+  - Source: [frontend-architecture-crypto-home-page](drafts/frontend-architecture-crypto-home-page.md)
+
+- **Floating-point precision in financial applications** — When to use strings, integers, BigInt, or decimal libraries for monetary values. Why IEEE 754 doubles are insufficient and what real-world APIs do about it.
+  - Source: [frontend-architecture-crypto-home-page](drafts/frontend-architecture-crypto-home-page.md)
+
+- **Leader election for redundant services** — Approaches including ZooKeeper, etcd, Redis-based distributed locking, and cloud-native solutions. When you need it, how it works, and what can go wrong.
+  - Source: [frontend-architecture-crypto-home-page](drafts/frontend-architecture-crypto-home-page.md)
+
+- **CDN caching strategies for dynamic API responses** — Cache key design, regional variation, cache invalidation vs TTL-based expiry, `Vary` headers, and edge compute.
+  - Source: [frontend-architecture-crypto-home-page](drafts/frontend-architecture-crypto-home-page.md)
+
 ## In Progress
 
 <!-- Topics currently being drafted -->

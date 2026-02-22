@@ -61,9 +61,13 @@ If 5 million clients each poll Coinbase every 5 seconds:
 - We'd hit rate limits within seconds
 - Again: banned, no control, no fallback
 
+Before moving on, it's worth clarifying one detail with the interviewer: "top five cryptocurrencies" could mean the top five by market cap (which changes over time) or a fixed list. For this exercise, let's assume the interviewer confirmed it's fine to hard-code the list (BTC, ETH, SOL, XRP, DOGE). In a production app, we'd likely make this dynamic — the ingestion service could periodically query a market cap ranking API and update the tracked symbols, or we could let users customize their own watchlist.
+
 **Verdict: We need a backend.**
 
-The backend's job is to aggregate data from upstream providers (as a single well-behaved client) and distribute it to our users (at whatever scale we need). This is a standard fan-out pattern.
+The backend's job is to aggregate data from upstream providers (as a single well-behaved client) and distribute it to our users (at whatever scale we need). This is a standard fan-out pattern — a single ingestion point feeding many consumers.
+
+<!-- TOPIC: Fan-out patterns in distributed systems — strategies for distributing data from a single source to many consumers, including pub/sub, CDN edge distribution, and push vs pull tradeoffs -->
 
 ## Designing the Backend
 
@@ -127,11 +131,11 @@ For this use case, option 3 makes the most sense. The data is small (prices for 
 Kraken and Coinbase return different response formats. The normalizer produces a canonical shape:
 
 ```typescript
-interface PriceData {
+interface NormalizedPriceData {
   prices: {
     symbol: string; // "BTC", "ETH", etc.
-    price: number; // USD price
-    change24h: number; // percentage
+    price: string; // USD price as string to avoid floating-point precision issues
+    change24h: string; // percentage as string
     source: "kraken" | "coinbase";
   }[];
   timestamp: number; // Unix timestamp of last update
@@ -141,6 +145,10 @@ interface PriceData {
   };
 }
 ```
+
+Prices are represented as strings rather than floating-point numbers. This is standard practice for financial data — both Kraken and Coinbase return prices as strings in their APIs for the same reason. JavaScript's IEEE 754 doubles can't precisely represent all decimal values (`0.1 + 0.2 !== 0.3`), and rounding errors compound across operations. By keeping prices as strings through the API layer, we preserve the exact values from the exchange and only convert to numbers at the display layer where precision loss is acceptable for formatting.
+
+<!-- TOPIC: Floating-point precision in financial applications — when to use strings, integers, BigInt, or decimal libraries for monetary values -->
 
 Including source metadata lets the frontend display appropriate warnings if one provider is degraded.
 
@@ -171,7 +179,7 @@ Challenges:
 
 **Option B: Server-Sent Events (SSE)**
 
-Similar to WebSocket but simpler (HTTP-based, one-way). Still requires persistent connections, so the scaling challenges remain.
+Similar to WebSocket but simpler (HTTP-based, one-way). Still requires persistent connections, so the scaling challenges remain. Additionally, React Native doesn't natively support the `EventSource` API — we'd need a polyfill or third-party library, which adds complexity without solving the fundamental scaling problem.
 
 **Option C: Client polling with aggressive caching**
 
@@ -191,12 +199,12 @@ Mobile App  ──poll──▶  CDN Edge  ──cache miss──▶  API Server
 
 At 5 million users polling every 5 seconds, we'd see ~1 million requests per second. But with a 2-second CDN cache TTL:
 
-- The CDN absorbs nearly all requests
-- Only a handful of requests per second reach our origin
+- The CDN absorbs the vast majority of requests
+- Each CDN edge location (PoP) only hits origin once per TTL expiry, so even with hundreds of edge locations the origin sees a few hundred requests per second at most
 - Stateless servers scale horizontally with ease
 - No WebSocket infrastructure complexity
 
-The tradeoff is latency. With a 2-second cache TTL and clients polling every 3-5 seconds, worst-case latency is ~7 seconds. We specified a 5-second _maximum_, so we'd need to tune these numbers — perhaps a 1-second cache TTL and 3-second polling interval.
+The tradeoff is latency. With a 2-second cache TTL and clients polling every 3-5 seconds, worst-case staleness is ~7 seconds (data changes right after the CDN caches the old response, and the client just finished polling). We specified a 5-second _maximum_, so we'd need to tune these numbers — perhaps a 1-second cache TTL and 3-second polling interval, giving a worst case of ~4 seconds plus network round-trip time at each hop.
 
 **Option D: Hybrid — polling with WebSocket upgrade for active users**
 
@@ -228,11 +236,11 @@ Response:
 ```json
 {
   "prices": [
-    { "symbol": "BTC", "price": 67432.15, "change24h": 2.34 },
-    { "symbol": "ETH", "price": 3521.8, "change24h": -0.52 },
-    { "symbol": "SOL", "price": 142.33, "change24h": 5.12 },
-    { "symbol": "XRP", "price": 0.5234, "change24h": 1.02 },
-    { "symbol": "DOGE", "price": 0.1542, "change24h": -2.31 }
+    { "symbol": "BTC", "price": "67432.15", "change24h": "2.34" },
+    { "symbol": "ETH", "price": "3521.80", "change24h": "-0.52" },
+    { "symbol": "SOL", "price": "142.33", "change24h": "5.12" },
+    { "symbol": "XRP", "price": "0.5234", "change24h": "1.02" },
+    { "symbol": "DOGE", "price": "0.1542", "change24h": "-2.31" }
   ],
   "timestamp": 1706900000000,
   "stale": false
@@ -244,10 +252,10 @@ The `timestamp` is when the backend last received data from upstream. The `stale
 Cache headers:
 
 ```
-Cache-Control: public, max-age=2
+Cache-Control: public, max-age=2, stale-while-revalidate=10
 ```
 
-This tells the CDN to cache for 2 seconds. Clients can cache locally too, but should revalidate frequently.
+This tells the CDN to cache for 2 seconds, and to serve stale responses for up to 10 additional seconds while fetching a fresh copy in the background. That way, even if the origin is briefly unreachable, clients still get a response rather than an error.
 
 ## Complete Data Flow
 
@@ -302,7 +310,7 @@ This tells the CDN to cache for 2 seconds. Clients can cache locally too, but sh
 │                                                                         │
 │    Cache TTL: 2 seconds                                                 │
 │    Edge locations worldwide                                             │
-│    ~99% of requests served from cache                                   │
+│    High cache hit rate (origin sees ~1 req/PoP/TTL)                     │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
                                    │
@@ -385,14 +393,14 @@ Here's a simplified implementation of the data fetching hook:
 import { useState, useEffect, useRef, useCallback } from "react";
 import { AppState, AppStateStatus } from "react-native";
 
-interface PriceData {
-  prices: { symbol: string; price: number; change24h: number }[];
+interface PriceResponse {
+  prices: { symbol: string; price: string; change24h: string }[];
   timestamp: number;
   stale: boolean;
 }
 
 interface UsePricesResult {
-  data: PriceData | null;
+  data: PriceResponse | null;
   isLoading: boolean;
   isFetching: boolean;
   error: Error | null;
@@ -403,34 +411,54 @@ const POLLING_INTERVAL = 4000; // 4 seconds
 const API_URL = "https://api.ourapp.com/v1/prices";
 
 export function usePrices(): UsePricesResult {
-  const [data, setData] = useState<PriceData | null>(null);
+  const [data, setData] = useState<PriceResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true); // true until first successful fetch
   const [isFetching, setIsFetching] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
   const fetchPrices = useCallback(async () => {
+    // Cancel any in-flight request before starting a new one
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     setIsFetching(true);
 
     try {
-      const response = await fetch(API_URL);
+      const response = await fetch(API_URL, { signal: controller.signal });
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
 
-      const json: PriceData = await response.json();
+      const json: PriceResponse = await response.json();
 
       setData(json);
       setError(null);
     } catch (e) {
+      if (e instanceof Error && e.name === "AbortError") return;
       setError(e instanceof Error ? e : new Error("Unknown error"));
       // Don't clear data — keep showing stale data on error
     } finally {
       setIsFetching(false);
       setIsLoading(false);
+    }
+  }, []);
+
+  const startPolling = useCallback(() => {
+    if (intervalRef.current) return; // Already polling
+
+    intervalRef.current = setInterval(fetchPrices, POLLING_INTERVAL);
+  }, [fetchPrices]);
+
+  const stopPolling = useCallback(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
     }
   }, []);
 
@@ -453,27 +481,17 @@ export function usePrices(): UsePricesResult {
     });
 
     return () => subscription.remove();
-  }, [fetchPrices]);
-
-  const startPolling = useCallback(() => {
-    if (intervalRef.current) return; // Already polling
-
-    intervalRef.current = setInterval(fetchPrices, POLLING_INTERVAL);
-  }, [fetchPrices]);
-
-  const stopPolling = useCallback(() => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-  }, []);
+  }, [fetchPrices, startPolling, stopPolling]);
 
   // Initial fetch and polling setup
   useEffect(() => {
     fetchPrices();
     startPolling();
 
-    return () => stopPolling();
+    return () => {
+      stopPolling();
+      abortControllerRef.current?.abort();
+    };
   }, [fetchPrices, startPolling, stopPolling]);
 
   return { data, isLoading, isFetching, error, refetch: fetchPrices };
@@ -484,6 +502,7 @@ Key decisions in this implementation:
 
 - **`isLoading` vs `isFetching`** — `isLoading` is true only until the first successful fetch. `isFetching` is true during any fetch. This lets us show a full-screen loader initially, but a subtle indicator during refreshes.
 - **Keep stale data on error** — If a fetch fails but we have previous data, we keep showing it. The user sees prices (possibly stale) rather than an error screen.
+- **Abort in-flight requests** — Each new fetch cancels any pending request via `AbortController`. This prevents stale responses from overwriting fresh data and avoids state updates after the component unmounts.
 - **Pause polling when backgrounded** — No point fetching data the user can't see. This saves battery and bandwidth.
 - **Fetch immediately on foreground** — When the user returns, we fetch fresh data rather than waiting for the next interval.
 
@@ -491,19 +510,31 @@ Key decisions in this implementation:
 
 ```tsx
 import React from "react";
-import { View, Text, FlatList, ActivityIndicator, StyleSheet } from "react-native";
+import { View, Text, FlatList, ActivityIndicator, Pressable, StyleSheet } from "react-native";
 import { usePrices } from "./usePrices";
 import { PriceCard } from "./PriceCard";
 import { formatTimestamp } from "./utils";
 
 export function HomeScreen() {
-  const { data, isLoading, isFetching, error } = usePrices();
+  const { data, isLoading, isFetching, error, refetch } = usePrices();
 
   if (isLoading) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" />
         <Text style={styles.loadingText}>Loading prices...</Text>
+      </View>
+    );
+  }
+
+  // Error with no cached data — show a full-screen error with retry
+  if (error && !data) {
+    return (
+      <View style={styles.centered}>
+        <Text style={styles.errorText}>Unable to load prices.</Text>
+        <Pressable onPress={refetch} style={styles.retryButton}>
+          <Text style={styles.retryText}>Retry</Text>
+        </Pressable>
       </View>
     );
   }
@@ -561,6 +592,17 @@ const styles = StyleSheet.create({
     color: "#c00",
     textAlign: "center",
   },
+  retryButton: {
+    marginTop: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: "#007bff",
+    borderRadius: 8,
+  },
+  retryText: {
+    color: "#fff",
+    fontWeight: "600",
+  },
   warningBanner: {
     backgroundColor: "#fff3cd",
     padding: 12,
@@ -600,12 +642,13 @@ import { View, Text, StyleSheet } from "react-native";
 
 interface PriceCardProps {
   symbol: string;
-  price: number;
-  change24h: number;
+  price: string;
+  change24h: string;
 }
 
 export function PriceCard({ symbol, price, change24h }: PriceCardProps) {
-  const isPositive = change24h >= 0;
+  const changeNum = parseFloat(change24h);
+  const isPositive = changeNum >= 0;
 
   return (
     <View style={styles.card}>
@@ -616,25 +659,26 @@ export function PriceCard({ symbol, price, change24h }: PriceCardProps) {
         <Text style={styles.price}>${formatPrice(price)}</Text>
         <Text style={[styles.change, isPositive ? styles.positive : styles.negative]}>
           {isPositive ? "+" : ""}
-          {change24h.toFixed(2)}%
+          {changeNum.toFixed(2)}%
         </Text>
       </View>
     </View>
   );
 }
 
-function formatPrice(price: number): string {
-  if (price >= 1) {
-    return price.toLocaleString(undefined, {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
-  }
-  // For prices under $1, show more decimal places
-  return price.toLocaleString(undefined, {
-    minimumFractionDigits: 4,
-    maximumFractionDigits: 4,
+function formatPrice(price: string): string {
+  const num = parseFloat(price);
+
+  // Intl.NumberFormat is safer than toLocaleString in React Native — Hermes
+  // (the default JS engine) has historically had inconsistent Intl support,
+  // so a polyfill like intl-pluralrules or @formatjs may be needed depending
+  // on the minimum supported Hermes version.
+  const formatter = new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: num >= 1 ? 2 : 4,
+    maximumFractionDigits: num >= 1 ? 2 : 4,
   });
+
+  return formatter.format(num);
 }
 
 const styles = StyleSheet.create({
@@ -727,7 +771,7 @@ If API returns unexpected data:
 4. Don't update UI with bad data
 
 ```typescript
-function isValidPriceData(data: unknown): data is PriceData {
+function isValidPriceResponse(data: unknown): data is PriceResponse {
   if (typeof data !== "object" || data === null) return false;
 
   const obj = data as Record<string, unknown>;
@@ -735,14 +779,18 @@ function isValidPriceData(data: unknown): data is PriceData {
   if (!Array.isArray(obj.prices)) return false;
   if (typeof obj.timestamp !== "number") return false;
 
-  return obj.prices.every(
-    (p) =>
-      typeof p === "object" &&
-      p !== null &&
-      typeof (p as Record<string, unknown>).symbol === "string" &&
-      typeof (p as Record<string, unknown>).price === "number" &&
-      (p as Record<string, unknown>).price > 0,
-  );
+  return obj.prices.every((p) => {
+    if (typeof p !== "object" || p === null) return false;
+    const item = p as Record<string, unknown>;
+    return (
+      typeof item.symbol === "string" &&
+      typeof item.price === "string" &&
+      !isNaN(parseFloat(item.price as string)) &&
+      parseFloat(item.price as string) > 0 &&
+      typeof item.change24h === "string" &&
+      !isNaN(parseFloat(item.change24h as string))
+    );
+  });
 }
 ```
 
@@ -757,7 +805,9 @@ The CDN is the critical piece for handling 5 million users. Configuration:
 - **Edge locations**: Global distribution for low latency
 - **Cache key**: Just the URL path (no query params, no cookies)
 
-Expected cache hit rate: >99%. At 1 million requests per second, fewer than 10,000 would reach origin.
+The cache hit rate depends on CDN topology: each edge PoP maintains its own cache and needs to fetch from origin independently on TTL expiry. A major CDN might have a few hundred PoPs, so with a 2-second TTL, origin sees roughly one request per PoP every 2 seconds — a few hundred requests per second at most, trivially handleable. The vast majority of the ~1 million client requests per second are served from edge cache without touching origin.
+
+<!-- TOPIC: CDN caching strategies for dynamic API responses — cache key design, regional variation, cache invalidation vs TTL-based expiry, Vary headers, and edge compute -->
 
 ### API Server Scaling
 
@@ -771,11 +821,13 @@ The ingestion service maintains exactly one WebSocket connection to Kraken and p
 
 Run 2-3 instances with leader election. Only the leader connects to upstream and writes to Redis. If the leader fails, another instance takes over. This prevents duplicate data or conflicting writes.
 
+<!-- TOPIC: Leader election for redundant services — approaches including ZooKeeper, etcd, Redis-based distributed locking, and cloud-native solutions like AWS ElastiCache Global Datastore -->
+
 ### Redis Configuration
 
 A single Redis instance is likely sufficient (prices for 5 cryptos is tiny). For redundancy:
 
-- Use Redis Sentinel or Redis Cluster
+- Use Redis Sentinel for automatic failover — it monitors a primary instance and promotes a replica if the primary fails. Redis Cluster (which provides horizontal sharding) is unnecessary here since our data set is trivially small.
 - Configure appropriate memory limits
 - Set TTLs on all keys to prevent unbounded growth
 
