@@ -27,27 +27,15 @@ export function TodoApp() {
 
   useEffect(() => {
     fetchTodos().then(setTodos);
-  }, []);
-
-  useEffect(() => {
     saveTodosToLocalStorage(todos);
   }, []);
 
   useEffect(() => {
     setCompletedCount(todos.filter((t) => t.completed).length);
-  }, [todos]);
-
-  useEffect(() => {
     if (todos.length > 10) {
       alert("Too many todos!");
     }
   }, [todos]);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      fetchTodos().then(setTodos);
-    }, 30000);
-  }, []);
 
   const memoizedTodos = useMemo(() => todos, [todos]);
 
@@ -192,17 +180,20 @@ Index keys are only safe when the list is static (no reordering, insertion, or d
 
 ## Derived State and the Render Cycle
 
-`TodoApp` tracks a completed count in its own piece of state, updated via an effect:
+`TodoApp` tracks a completed count in its own piece of state, updated inside the `[todos]` effect:
 
 ```typescript
 const [completedCount, setCompletedCount] = useState(0);
 
 useEffect(() => {
   setCompletedCount(todos.filter((t) => t.completed).length);
+  if (todos.length > 10) {
+    alert("Too many todos!");
+  }
 }, [todos]);
 ```
 
-This works, but it's doing unnecessary work. The sequence is: render with the old count, commit to the DOM, paint (the user briefly sees the stale count), run the effect, call `setCompletedCount`, which triggers a _second_ render with the corrected count. Every state change to `todos` produces two render cycles instead of one, and the stale intermediate state can cause a visible flicker.
+The `setCompletedCount` call works, but it's doing unnecessary work. The sequence is: render with the old count, commit to the DOM, paint (the user briefly sees the stale count), run the effect, call `setCompletedCount`, which triggers a _second_ render with the corrected count. Every state change to `todos` produces two render cycles instead of one, and the stale intermediate state can cause a visible flicker.
 
 The completed count is _derived data_ — it can be computed entirely from `todos`, which means it doesn't need its own state at all. For a cheap computation like filtering an array and reading its length, the simplest and most efficient approach is to compute it inline during render:
 
@@ -222,19 +213,24 @@ This does nothing. `useMemo` returns the memoised result when the dependencies h
 
 ## Understanding Effects
 
-Effects are the most commonly misused hook in React, and `TodoApp` has five of them — at least two of which shouldn't be effects at all.
+Effects are the most commonly misused hook in React, and `TodoApp` has two of them — each mixing multiple unrelated concerns together because they share a dependency array. At least two of those concerns shouldn't be effects at all.
 
 ### Missing Dependencies
 
+Inside the first effect, `saveTodosToLocalStorage` references `todos` — but the dependency array is empty:
+
 ```typescript
 useEffect(() => {
+  fetchTodos().then(setTodos);
   saveTodosToLocalStorage(todos);
 }, []);
 ```
 
 The intent is to persist todos to localStorage whenever they change, but the empty dependency array means this effect runs exactly once — on mount. After the initial save, subsequent changes to `todos` are never persisted.
 
-The dependency array isn't an optimisation knob you tune; it's a declaration of which values the effect reads. If the effect references `todos`, then `todos` must be in the array:
+The dependency array isn't an optimisation knob you tune; it's a declaration of which values the effect reads. If the effect references `todos`, then `todos` must be in the array. But fixing this by adding `todos` to the dependency array would cause the _entire_ effect — including the fetch — to re-run on every change to `todos`, which isn't what you want either. This is a consequence of grouping unrelated concerns into a single effect: the dependency arrays become impossible to get right for all the logic inside.
+
+The `saveTodosToLocalStorage` call should be its own effect with the correct dependency:
 
 ```typescript
 useEffect(() => {
@@ -242,19 +238,22 @@ useEffect(() => {
 }, [todos]);
 ```
 
-The underlying misconception is treating `useEffect` like a lifecycle method (`componentDidMount`), where the empty array means "run on mount". Effects are synchronisation mechanisms — they keep external systems (localStorage, the DOM, a WebSocket) in sync with React state. The dependency array tells React _when_ to re-synchronise.
+The underlying misconception is treating `useEffect` like a lifecycle method (`componentDidMount`), where the empty array means "run on mount". Effects are synchronisation mechanisms — they keep external systems (localStorage, the DOM, a WebSocket) in sync with React state. The dependency array tells React _when_ to re-synchronise. Grouping effects by dependency array rather than by concern makes this harder to get right — each effect should do one thing, so its dependencies naturally reflect exactly what that one thing needs.
 
 ### Effects for Event-Driven Logic
 
+The second effect also contains an alert that fires when there are too many to-dos:
+
 ```typescript
 useEffect(() => {
+  setCompletedCount(todos.filter((t) => t.completed).length);
   if (todos.length > 10) {
     alert("Too many todos!");
   }
 }, [todos]);
 ```
 
-This uses an effect to respond to a state change, but the alert is really a consequence of a user action (adding a to-do), not something that needs synchronising with an external system. The distinction matters because effects run _after_ render and paint, which means the alert fires later than the user expects, and it runs on every re-render where the condition is true — including on mount if the data is loaded from localStorage. Additionally, we're not actually preventing the user from adding more than 10 to-dos, we're just warning them after the fact. For the purposes of this exercise, let's assume that this was also an oversight.
+The alert uses an effect to respond to a state change, but it's really a consequence of a user action (adding a to-do), not something that needs synchronising with an external system. The distinction matters because effects run _after_ render and paint, which means the alert fires later than the user expects, and it runs on every re-render where the condition is true — including on mount if the data is loaded from localStorage. Additionally, we're not actually preventing the user from adding more than 10 to-dos, we're just warning them after the fact.
 
 The fix is to move the check into the event handler that adds the to-do:
 
@@ -298,13 +297,15 @@ This pattern is worth internalising as a default: any time a state update depend
 
 ## Async Effects and Race Conditions
 
-The data-fetching effect at the top of the component:
+With `saveTodosToLocalStorage` separated into its own effect, the first effect is left with the fetch:
 
 ```typescript
 useEffect(() => {
   fetchTodos().then(setTodos);
 }, []);
 ```
+
+A quick note on the syntax: `.then(setTodos)` is _point-free_ style — it passes `setTodos` directly as the `.then` callback, which means the resolved value of the promise becomes the argument. It's equivalent to `.then((data) => setTodos(data))`.
 
 The concern here isn't a warning — React 18 removed the "state update on an unmounted component" warning that used to fire in this scenario. The real problem is a _race condition_. If the component unmounts and remounts (which happens during development in Strict Mode, and can happen in production with fast navigation), two fetch requests are now in flight. Whichever resolves last wins, and that might not be the one you expect.
 
@@ -327,32 +328,7 @@ useEffect(() => {
 
 When the effect cleans up (on unmount or before re-running), `controller.abort()` cancels the request. The `fetch` promise rejects with an `AbortError`, which you catch and ignore. This approach has two advantages over the boolean-flag pattern (`let cancelled = false`): it actually frees network resources instead of just discarding the response, and it integrates with the browser's native request cancellation.
 
-## Effect Cleanup
-
-Speaking of cleanup, the polling effect has a classic leak:
-
-```typescript
-useEffect(() => {
-  const interval = setInterval(() => {
-    fetchTodos().then(setTodos);
-  }, 30000);
-}, []);
-```
-
-Without a cleanup function, the interval keeps running after the component unmounts — every 30 seconds, a fetch fires and tries to update state on a component that no longer exists. This becomes immediately visible in development because React's Strict Mode simulates a mount-unmount-remount cycle, creating two intervals that poll in parallel.
-
-The fix is to return a cleanup function:
-
-```typescript
-useEffect(() => {
-  const interval = setInterval(() => {
-    fetchTodos().then(setTodos);
-  }, 30000);
-  return () => clearInterval(interval);
-}, []);
-```
-
-The cleanup function runs before the effect re-executes (if dependencies change) and when the component unmounts. Strict Mode's double-invocation is specifically designed to surface this class of bug — if your effect breaks when run twice, it's missing cleanup.
+The cleanup function runs before the effect re-executes (if dependencies change) and when the component unmounts. Strict Mode's double-invocation is specifically designed to surface this class of bug — if your effect breaks when run twice, it's missing cleanup. The same principle applies to any resource that outlives a render: timers (`setTimeout`, `setInterval`), event listeners, WebSocket connections — anything your effect sets up, the cleanup function must tear down.
 
 ## TypeScript: Explicit Types at the Boundary
 
