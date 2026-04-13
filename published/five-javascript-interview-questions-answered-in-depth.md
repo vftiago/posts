@@ -136,7 +136,7 @@ Because `var` is function-scoped, there's a single `i` variable shared across al
 
 Q: _Can you please explain what a garbage collector does or is and what's meant by a memory leak in that context?_
 
-A: A garbage collector automatically frees memory occupied by values that are no longer reachable from the program's root references. A memory leak is memory the program no longer needs but that remains reachable, so the collector can't reclaim it.
+A: A garbage collector automatically frees memory occupied by objects that are no longer reachable from the program's root references. A memory leak is memory the program no longer needs but that remains reachable, so the collector can't reclaim it.
 
 Modern JavaScript engines (V8, SpiderMonkey, JavaScriptCore) use garbage collection strategies built on the foundational _mark-and-sweep_ concept. Starting from a set of roots — the global object and the current call stack — the collector traverses every reachable reference, following object properties, closure environments, and other pointers. Any object not reachable from a root is considered garbage, and its memory is freed.
 
