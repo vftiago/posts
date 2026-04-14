@@ -18,7 +18,7 @@ A: Use a plain object or a `Map`. Both provide constant-time lookup by key on av
 
 JavaScript has two built-in options for associating values with unique keys: plain objects and `Map`.
 
-A **plain object** is the traditional choice. You set properties with bracket or dot notation, and in practice retrieval is O(1) on average in all major engines. The main limitation is that object keys are always strings or Symbols — any other type is coerced to a string. This means numeric keys like `1` and string keys like `"1"` refer to the same property:
+A **plain object** is the traditional choice. You set properties with bracket or dot notation, and in practice retrieval is O(1) on average in all major engines. The main limitation is that object keys are always strings or [Symbols](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Symbol) — any other type is coerced to a string. This means numeric keys like `1` and string keys like `"1"` refer to the same property:
 
 ```javascript
 const obj = {};
@@ -27,7 +27,7 @@ obj["1"] = "also one";
 console.log(Object.keys(obj)); // ["1"] — only one entry
 ```
 
-A **`Map`** is the purpose-built key-value collection introduced in ES2015. It accepts keys of any type — objects, functions, primitives — and uses the SameValueZero algorithm for key comparison, so `1` and `"1"` are distinct keys:
+A **[`Map`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map)** is the purpose-built key-value collection introduced in ES2015. It accepts keys of any type — objects, functions, primitives — and uses the [SameValueZero algorithm](https://tc39.es/ecma262/#sec-samevaluezero) for key comparison, so `1` and `"1"` are distinct keys:
 
 ```javascript
 const map = new Map();
@@ -44,7 +44,7 @@ Q: _Why does JavaScript have a triple equals operator?_
 
 A: `==` performs type coercion before comparing, which can produce unintuitive results. `===` compares both type and value without coercion, making equality checks predictable.
 
-JavaScript's loose equality operator (`==`) follows the Abstract Equality Comparison algorithm, which converts operands to a common type before comparing them. The rules are complex enough that even experienced developers can't always predict the result:
+JavaScript's loose equality operator (`==`) follows the [Abstract Equality Comparison algorithm](https://tc39.es/ecma262/#sec-islooselyequal), which converts operands to a common type before comparing them. The rules are complex enough that even experienced developers can't always predict the result:
 
 ```javascript
 0 == ""; // true  — "" is coerced to 0
@@ -54,9 +54,9 @@ JavaScript's loose equality operator (`==`) follows the Abstract Equality Compar
 
 The first two comparisons are `true`, but the third is `false` — loose equality isn't transitive, which makes it difficult to reason about.
 
-Strict equality (`===`) is straightforward: if the types differ, return `false`. No conversion, no surprises. The only edge case worth knowing is that `NaN === NaN` evaluates to `false` — `NaN` is the only JavaScript value that isn't strictly equal to itself (a consequence of the IEEE 754 floating-point specification, not a JavaScript-specific choice). Use `Number.isNaN()` to test for it.
+Strict equality (`===`) is straightforward: if the types differ, return `false`. No conversion, no surprises. The only edge case worth knowing is that `NaN === NaN` evaluates to `false` — `NaN` is the only JavaScript value that isn't strictly equal to itself (a consequence of the [IEEE 754 floating-point specification](https://en.wikipedia.org/wiki/IEEE_754), not a JavaScript-specific choice). Use [`Number.isNaN()`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/isNaN) to test for it.
 
-For completeness, `Object.is()` provides a third comparison that behaves like `===` except in two cases: `Object.is(NaN, NaN)` returns `true`, and `Object.is(+0, -0)` returns `false`. It's rarely needed in day-to-day code, but it's the most precise value identity check JavaScript offers.
+For completeness, [`Object.is()`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/is) provides a third comparison that behaves like `===` except in two cases: `Object.is(NaN, NaN)` returns `true`, and `Object.is(+0, -0)` returns `false`. It's rarely needed in day-to-day code, but it's the most precise value identity check JavaScript offers.
 
 ## 3. Pass by Value vs. Pass by Reference
 
@@ -88,7 +88,7 @@ console.log(original.name); // "mutated" — changed
 
 When you pass `original` to a function, JavaScript copies the _reference_, not the object itself. Both the caller's variable and the function's parameter now point to the same object in memory. Mutating properties through either reference affects the shared object, which is why `mutate` works. But `reassign` only overwrites the local copy of the reference — the caller's `original` variable still points to the same object it always did.
 
-This behavior is sometimes called "call by sharing," a term first described by Barbara Liskov for the CLU language in the 1970s: you can mutate the shared object, but you can't rebind the caller's variable.
+This behavior is sometimes called "[call by sharing](https://en.wikipedia.org/wiki/Evaluation_strategy#Call_by_sharing)", a term first described by Barbara Liskov for the CLU language in the 1970s: you can mutate the shared object, but you can't rebind the caller's variable.
 
 ## 4. Closures in JavaScript
 
@@ -96,7 +96,7 @@ Q: _What is a closure in JavaScript?_
 
 A: A closure is a function that retains access to variables from its enclosing lexical scope, even after that scope has finished executing.
 
-When JavaScript creates a function, it attaches a reference to the _lexical environment_ in which the function was defined — the ECMAScript specification calls this the function's `[[Environment]]` internal slot. This means a function can always access the variables that were in scope when it was created, regardless of when or where it's eventually called.
+When JavaScript creates a function, it attaches a reference to the _lexical environment_ in which the function was defined — the ECMAScript specification calls this the function's [`[[Environment]]` internal slot](https://tc39.es/ecma262/#table-internal-slots-of-ecmascript-function-objects). This means a function can always access the variables that were in scope when it was created, regardless of when or where it's eventually called.
 
 A common use of closures is creating private state:
 
@@ -138,7 +138,7 @@ Q: _Can you please explain what a garbage collector does or is and what's meant 
 
 A: A garbage collector automatically frees memory occupied by objects that are no longer reachable from the program's root references. A memory leak is memory the program no longer needs but that remains reachable, so the collector can't reclaim it.
 
-Modern JavaScript engines (V8, SpiderMonkey, JavaScriptCore) use garbage collection strategies built on the foundational _mark-and-sweep_ concept. Starting from a set of roots — the global object and the current call stack — the collector traverses every reachable reference, following object properties, closure environments, and other pointers. Any object not reachable from a root is considered garbage, and its memory is freed.
+Modern JavaScript engines (V8, SpiderMonkey, JavaScriptCore) use garbage collection strategies built on the foundational [_mark-and-sweep_](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Memory_management) concept. Starting from a set of roots — the global object and the current call stack — the collector traverses every reachable reference, following object properties, closure environments, and other pointers. Any object not reachable from a root is considered garbage, and its memory is freed.
 
 In JavaScript, a memory leak happens when code unintentionally keeps a reference alive, so the garbage collector correctly determines the object is still reachable and leaves it alone. The collector is working as designed; the bug is in the code holding onto references it no longer needs.
 
