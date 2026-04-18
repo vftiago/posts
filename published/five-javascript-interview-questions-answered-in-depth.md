@@ -14,11 +14,11 @@ Let's dive right into it.
 
 Q: _I have a list of variables each with a unique key in my JavaScript code and I want to store the variables in a data structure so that I can efficiently retrieve the one that corresponds to each key, what are some data structures I can use for that?_
 
-A: Use a plain object or a `Map`. Both provide constant-time lookup by key on average.
+A: Use a plain object or a `Map`. Both support fast key-based lookup in practice, but `Map` is the purpose-built keyed collection.
 
 JavaScript has two built-in options for associating values with unique keys: plain objects and `Map`.
 
-A **plain object** is the traditional choice. You set properties with bracket or dot notation, and in practice retrieval is O(1) on average in all major engines. The main limitation is that object keys are always strings or [Symbols](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Symbol) — any other type is coerced to a string. This means numeric keys like `1` and string keys like `"1"` refer to the same property:
+A **plain object** is the traditional choice. You set properties with bracket or dot notation, and modern engines optimize property access heavily, but the language specification does not guarantee a particular complexity bound. The main limitation is that object keys are always strings or [Symbols](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Symbol) — any other type is coerced to a string. This means numeric keys like `1` and string keys like `"1"` refer to the same property:
 
 ```javascript
 const obj = {};
@@ -27,7 +27,7 @@ obj["1"] = "also one";
 console.log(Object.keys(obj)); // ["1"] — only one entry
 ```
 
-A **[`Map`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map)** is the purpose-built key-value collection introduced in ES2015. It accepts keys of any type — objects, functions, primitives — and uses the [SameValueZero algorithm](https://tc39.es/ecma262/#sec-samevaluezero) for key comparison, so `1` and `"1"` are distinct keys:
+A **`Map`** is the purpose-built key-value collection introduced in ES2015. It accepts keys of any type — objects, functions, primitives — and uses the [SameValueZero algorithm](https://tc39.es/ecma262/#sec-samevaluezero) for key comparison, so `1` and `"1"` are distinct keys:
 
 ```javascript
 const map = new Map();
@@ -36,7 +36,7 @@ map.set("1", "string one");
 console.log(map.size); // 2 — distinct keys
 ```
 
-`Map` also maintains strict insertion order for all key types (unlike plain objects, where array-index keys are sorted numerically before other string keys), exposes a `size` property directly, and is iterable out of the box with `for...of`. Plain objects work well for structured data with known string keys (configuration, API responses), while `Map` is the better choice when keys are dynamic, non-string, or when the collection changes frequently.
+`Map` also preserves insertion order for iteration, exposes a `size` property directly, and is iterable out of the box with `for...of`. Ordinary objects have more nuanced [own-property ordering](https://tc39.es/ecma262/#sec-ordinaryownpropertykeys): integer index keys come first in ascending numeric order, then other string keys in insertion order, then Symbols in insertion order. They also inherit prototype properties unless you deliberately create them with `Object.create(null)`. Plain objects work well for structured data with known string keys (configuration, parsed JSON, API responses), while `Map` is the better choice when keys are dynamic, non-string, or when you want keyed-collection semantics rather than object-property semantics.
 
 ## 2. Strict vs. Loose Equality
 
@@ -44,7 +44,7 @@ Q: _Why does JavaScript have a triple equals operator?_
 
 A: `==` performs type coercion before comparing, which can produce unintuitive results. `===` compares both type and value without coercion, making equality checks predictable.
 
-JavaScript's loose equality operator (`==`) follows the [Abstract Equality Comparison algorithm](https://tc39.es/ecma262/#sec-islooselyequal), which converts operands to a common type before comparing them. The rules are complex enough that even experienced developers can't always predict the result:
+JavaScript's loose equality operator (`==`) follows the [Abstract Equality Comparison algorithm](https://tc39.es/ecma262/#sec-islooselyequal), which may coerce operands according to a complex set of rules before comparing them. The rules are complex enough that even experienced developers can't always predict the result:
 
 ```javascript
 0 == ""; // true  — "" is coerced to 0
@@ -54,15 +54,13 @@ JavaScript's loose equality operator (`==`) follows the [Abstract Equality Compa
 
 The first two comparisons are `true`, but the third is `false` — loose equality isn't transitive, which makes it difficult to reason about.
 
-Strict equality (`===`) is straightforward: if the types differ, return `false`. No conversion, no surprises. The only edge case worth knowing is that `NaN === NaN` evaluates to `false` — `NaN` is the only JavaScript value that isn't strictly equal to itself (a consequence of the [IEEE 754 floating-point specification](https://en.wikipedia.org/wiki/IEEE_754), not a JavaScript-specific choice). Use [`Number.isNaN()`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/isNaN) to test for it.
-
-For completeness, [`Object.is()`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/is) provides a third comparison that behaves like `===` except in two cases: `Object.is(NaN, NaN)` returns `true`, and `Object.is(+0, -0)` returns `false`. It's rarely needed in day-to-day code, but it's the most precise value identity check JavaScript offers.
+Strict equality (`===`) is much easier to reason about: if the types differ, the result is `false`, and for most values that's the end of the story. Two number-specific cases are worth knowing, though: `NaN === NaN` is `false`, and `+0 === -0` is `true`. If those cases matter, use `Object.is()`. For all other values it agrees with `===`, but `Object.is(NaN, NaN)` is `true` and `Object.is(+0, -0)` is `false`, so it exposes JavaScript's same-value comparison directly.
 
 ## 3. Pass by Value vs. Pass by Reference
 
 Q: _What's the difference between pass by value and pass by reference?_
 
-A: Pass by value means the function receives a copy of the data, so changes to the copy don't affect the original. Pass by reference means the function receives the original variable itself, so reassigning it changes the caller's variable too. JavaScript is always pass by value, but for objects the "value" being passed is a reference to the object in memory.
+A: Pass by value means the function receives a copy of the argument value, so reassigning the parameter does not affect the caller. Pass by reference means the callee can rebind the caller's variable itself. JavaScript is always pass by value, but when the value is an object reference, both caller and callee can use that value to access the same object.
 
 This distinction trips people up because JavaScript's behavior with objects _looks_ like pass by reference but isn't. The key test: in a language with true pass by reference (C++ with `&`, C# with `ref`), you can write a `swap(a, b)` function that exchanges the values of two variables in the caller's scope. You can't do that in JavaScript.
 
@@ -86,9 +84,9 @@ mutate(original);
 console.log(original.name); // "mutated" — changed
 ```
 
-When you pass `original` to a function, JavaScript copies the _reference_, not the object itself. Both the caller's variable and the function's parameter now point to the same object in memory. Mutating properties through either reference affects the shared object, which is why `mutate` works. But `reassign` only overwrites the local copy of the reference — the caller's `original` variable still points to the same object it always did.
+When you pass `original` to a function, JavaScript copies the _reference value_, not the object itself. Both the caller's variable and the function's parameter now refer to the same object. Mutating properties through either reference affects the shared object, which is why `mutate` works. But `reassign` only overwrites the local copy of the reference — the caller's `original` variable still points to the same object it always did.
 
-This behavior is sometimes called "[call by sharing](https://en.wikipedia.org/wiki/Evaluation_strategy#Call_by_sharing)", a term first described by Barbara Liskov for the CLU language in the 1970s: you can mutate the shared object, but you can't rebind the caller's variable.
+This behavior is sometimes called [call by sharing](https://en.wikipedia.org/wiki/Evaluation_strategy#Call_by_sharing), a term first described by Barbara Liskov for the CLU language in the 1970s: you can mutate the shared object, but you can't rebind the caller's variable.
 
 ## 4. Closures in JavaScript
 
@@ -96,7 +94,7 @@ Q: _What is a closure in JavaScript?_
 
 A: A closure is a function that retains access to variables from its enclosing lexical scope, even after that scope has finished executing.
 
-When JavaScript creates a function, it attaches a reference to the _lexical environment_ in which the function was defined — the ECMAScript specification calls this the function's [`[[Environment]]` internal slot](https://tc39.es/ecma262/#table-internal-slots-of-ecmascript-function-objects). This means a function can always access the variables that were in scope when it was created, regardless of when or where it's eventually called.
+When JavaScript creates a function, the function object stores a reference to the _lexical environment_ in which it was defined — the ECMAScript specification models this with the function's [`[[Environment]]` internal slot](https://tc39.es/ecma262/#table-internal-slots-of-ecmascript-function-objects). This means a function can resolve identifiers from the scope that existed when it was created, regardless of when or where it's eventually called.
 
 A common use of closures is creating private state:
 
@@ -130,7 +128,7 @@ for (var i = 0; i < 3; i++) {
 // logs: 3, 3, 3
 ```
 
-Because `var` is function-scoped, there's a single `i` variable shared across all three closures. By the time the callbacks execute, the loop has finished and `i` is 3. Replacing `var` with `let` fixes this because `let` is block-scoped — each iteration creates a new binding, and each closure captures its own independent variable.
+Because `var` is function-scoped, there's a single `i` binding shared across all three closures. By the time the callbacks execute, the loop has finished and `i` is 3. Replacing `var` with `let` in the loop header fixes this, not merely because `let` is block-scoped, but because [`for (let i = ...)` creates a fresh binding for `i` on each iteration](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/for#lexical_declarations_in_the_initialization_block). Each closure captures a different binding, so each callback sees the value from its own iteration.
 
 ## 5. Garbage Collection and Memory Leaks
 
@@ -138,13 +136,15 @@ Q: _Can you please explain what a garbage collector does or is and what's meant 
 
 A: A garbage collector automatically frees memory occupied by objects that are no longer reachable from the program's root references. A memory leak is memory the program no longer needs but that remains reachable, so the collector can't reclaim it.
 
-Modern JavaScript engines (V8, SpiderMonkey, JavaScriptCore) use garbage collection strategies built on the foundational [_mark-and-sweep_](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Memory_management) concept. Starting from a set of roots — the global object and the current call stack — the collector traverses every reachable reference, following object properties, closure environments, and other pointers. Any object not reachable from a root is considered garbage, and its memory is freed.
+Modern JavaScript engines (V8, SpiderMonkey, JavaScriptCore) use collectors built on the foundational [_mark-and-sweep_](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Memory_management#mark-and-sweep_algorithm) idea, layered with generational, incremental, and concurrent techniques to reduce pause times. Starting from a set of roots — such as the global object and currently active execution contexts — the collector traverses every reachable reference, following object properties, captured variables, and other links. Any object with no path from a root is considered garbage and can be reclaimed.
 
 In JavaScript, a memory leak happens when code unintentionally keeps a reference alive, so the garbage collector correctly determines the object is still reachable and leaves it alone. The collector is working as designed; the bug is in the code holding onto references it no longer needs.
 
 Common sources of memory leaks in JavaScript:
 
-- **Forgotten event listeners** — attaching a listener to a DOM element and never removing it, especially when the listener's closure holds references to large data structures
-- **Detached DOM nodes** — removing an element from the document but retaining a JavaScript reference to it, preventing the element and its subtree from being collected
-- **Closures capturing more than intended** — in most major engines, multiple closures created in the same scope share a single environment record, so if one closure captures variable A and another captures variable B, both variables remain alive as long as either closure is reachable
-- **Uncleared timers** — `setInterval` callbacks that are never cleared continue to execute and keep their closures and all referenced data alive indefinitely
+- **Listeners on long-lived targets** — attaching a listener to `window`, `document`, or some other long-lived object and forgetting to remove it can keep the listener closure, and everything it captures, alive indefinitely
+- **Detached DOM nodes still referenced from JavaScript** — removing an element from the document does not make it collectible if some variable, array, cache, or closure still points to it
+- **Closures retaining more state than expected** — a surviving closure keeps the bindings it closes over reachable. Multiple closures created by the same function invocation may share one lexical environment, so keeping one alive can keep more of that invocation's state alive than you intended
+- **Uncleared timers** — `setInterval` callbacks that are never cleared continue to execute and keep their closures and referenced data alive indefinitely
+
+The key distinction is that garbage collection is about _reachability_, not about whether your business logic is "finished" with an object. If some path from a root can still reach it, the collector must keep it alive. A memory leak is therefore usually a reference-management bug in application code, not a failure of the collector.
