@@ -24,19 +24,19 @@ To understand why, we need to distinguish between three concepts: _code points_,
 
 ### Code Points
 
-A _code point_ is Unicode's abstract representation of a character. The Unicode Standard assigns a unique number — ranging from 0 to 0x10FFFF — to every character, symbol, and control sequence. The letter "A" is code point U+0041. The emoji "😀" is code point U+1F600. The regional indicator symbol for "G" is code point U+1F1EC.
+A [code point](https://www.unicode.org/glossary/#code_point) is a numeric value in the Unicode codespace. Unicode uses code points — ranging from 0 to 0x10FFFF — to identify characters, symbols, and control characters. The letter "A" is code point U+0041. The emoji "😀" is code point U+1F600. The regional indicator symbol for "G" is code point U+1F1EC.
 
 Code points are the logical unit of text. When we think about "characters" in human terms, we're usually thinking at the grapheme cluster level — what we perceive as a single visual character — though a grapheme cluster can consist of multiple code points, as we'll see shortly.
 
 ### Code Units
 
-A _code unit_ is the minimal bit combination used to represent a single unit of encoded text in a particular encoding scheme. Different encodings use different code unit sizes: UTF-8 uses 8-bit code units, UTF-32 uses 32-bit code units, and UTF-16 — the encoding JavaScript uses internally — uses 16-bit code units.
+A _code unit_ is the minimal bit combination used to represent a single unit of encoded text in a particular encoding scheme. Different encodings use different code unit sizes: UTF-8 uses 8-bit code units, UTF-32 uses 32-bit code units, and UTF-16 uses 16-bit code units. JavaScript's string APIs expose text in terms of UTF-16 code units.
 
 Here's where the complexity begins. The Unicode codespace extends to 0x10FFFF (over 1.1 million possible code points), but a 16-bit code unit can only represent values from 0 to 0xFFFF (65,536 values). This means UTF-16 cannot represent every code point with a single code unit.
 
 Whether a code point can be encoded as a single UTF-16 code unit depends on its position in the codespace:
 
-1. **The [Basic Multilingual Plane](<https://en.wikipedia.org/wiki/Plane_(Unicode)#Basic_Multilingual_Plane>) (BMP)** — Code points U+0000 to U+FFFF. These fit in a single 16-bit code unit. This includes most common characters: Latin alphabets, Cyrillic, Greek, Chinese, Japanese, Korean, and many symbols.
+1. **The [Basic Multilingual Plane](https://www.unicode.org/roadmaps/bmp/) (BMP, Plane 0)** — Code points U+0000 to U+FFFF. These fit in a single 16-bit code unit. This includes most common characters: Latin alphabets, Cyrillic, Greek, Chinese, Japanese, Korean, and many symbols.
 
 2. **Supplementary Planes** — Code points U+10000 to U+10FFFF. These require two 16-bit code units, called a _surrogate pair_. This includes emoji, mathematical symbols, historic scripts, and rare CJK characters.
 
@@ -103,7 +103,7 @@ When you naively truncate user-generated content — say, for a preview or datab
 
 2. **Broken emoji** — A flag like 🇬🇧 sliced in the middle becomes two separate regional indicators that may render as boxed letters or not render at all.
 
-3. **Encoding failures** — Some systems reject strings containing orphan surrogates. [Protocol buffers](https://protobuf.dev/programming-guides/proto3/#scalar), for instance, require valid UTF-8, and an orphan surrogate cannot be validly encoded in UTF-8 (surrogates are not valid Unicode scalar values).
+3. **Encoding failures** — Some systems reject strings containing orphan surrogates. [Protocol Buffers `string` fields](https://protobuf.dev/programming-guides/proto3/#scalar), for instance, are defined as UTF-8 text, and an orphan surrogate is not valid UTF-8.
 
 4. **Character count mismatches** — If your UI shows "12/100 characters" but counts code units while displaying graphemes, users will be confused when some emoji count as 2 or 4 or 8.
 
@@ -151,7 +151,7 @@ truncateGraphemes("Hello 👋🏽", 6); // "Hello " — six graphemes (the space
 truncateGraphemes("Hello 👋🏽", 7); // "Hello 👋🏽" — seven graphemes
 ```
 
-`Intl.Segmenter` has been available in all major browsers since April 2024 ([Baseline Newly available](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/Segmenter)) and in Node.js since v16.
+`Intl.Segmenter` has been available in all major browsers since April 2024 ([Baseline Newly available](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/Segmenter)). In Node.js, support is part of the wider `Intl` / ECMA-402 surface, but the exact availability depends on your runtime version and ICU configuration ([Node.js internationalization support](https://nodejs.org/api/intl.html)).
 
 ## Key Takeaways
 
