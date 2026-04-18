@@ -34,5 +34,7 @@ python3 tools/straightquotes.py --check drafts/what-are-signals.md
 - Use straight quotes in repository Markdown. `tools/straightquotes.py --check <file>` is the relevant content-style validation command for article files.
 - Write for a senior-engineer/interview audience: explanations should be mechanistic, explicit about tradeoffs and assumptions, and strong enough to survive follow-up questions.
 - Before treating an article as publication-ready, independently verify current technical claims against official sources, especially framework internals, version-sensitive behavior, and comparisons.
+- Add citations where appropriate. Prefer official documentation or MDN whenever possible.
 - When a section would derail the current article, add a `<!-- TOPIC: ... -->` marker instead of forcing the digression, and keep `topics.md` aligned with that backlog.
+- After making edits to an article, review the entire post for cohesion so the text, transitions, and overall argument still flow naturally.
 - Keep the prose technical and measured: active voice, longer connected paragraphs, minimal rhetorical drama, and clear definitions for overloaded terms.
