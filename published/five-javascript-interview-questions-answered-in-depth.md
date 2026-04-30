@@ -58,7 +58,7 @@ Strict equality (`===`) is much easier to reason about: if the types differ, the
 
 Q: _What's the difference between pass by value and pass by reference?_
 
-A: [Function parameters in JavaScript are passed by value](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Functions#passing_arguments). Reassigning the parameter does not affect the caller. When the copied value happens to be an object reference, both caller and callee can still use that copied reference to access and mutate the same object.
+A: Pass by value means the callee receives its own copy of the argument value, so reassigning the parameter does not affect the caller. Pass by reference means the callee can operate on the caller's variable itself, so rebinding the parameter changes what the caller's variable refers to. In JavaScript, [function parameters are passed by value](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Functions#passing_arguments). When that copied value is an object reference, both caller and callee can still use it to access and mutate the same object.
 
 This distinction trips people up because JavaScript's behavior with objects _looks_ like pass by reference but isn't. The key test: in a language with true pass by reference (C++ with `&`, C# with `ref`), you can write a `swap(a, b)` function that exchanges the values of two variables in the caller's scope. You can't do that in JavaScript.
 
