@@ -14,7 +14,7 @@ Q: _I have a list of variables each with a unique key in my JavaScript code and 
 
 A: Use a plain object or a `Map`. Both can be fast in practice, but `Map` is the purpose-built keyed collection and the specification expects implementations to provide sublinear average access time.
 
-JavaScript has two built-in options for associating values with unique keys: plain objects and `Map`.
+For general-purpose keyed lookup in ordinary JavaScript code, the two main built-in choices are plain objects and `Map`.
 
 A **plain object** is the traditional choice. You set properties with bracket or dot notation, and modern engines optimize property access heavily, but the language specification does not guarantee a particular complexity bound. The main limitation is that object keys are always strings or [Symbols](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Symbol) — any other type is coerced to a string. This means numeric keys like `1` and string keys like `"1"` refer to the same property:
 
@@ -40,7 +40,7 @@ console.log(map.size); // 2 — distinct keys
 
 Q: _Why does JavaScript have a triple equals operator?_
 
-A: `==` performs type coercion before comparing, which can produce unintuitive results. `===` compares both type and value without coercion, making equality checks predictable.
+A: `==` performs type coercion before comparing, which can produce unintuitive results. `===` does not coerce: for primitives it compares the primitive value, and for objects it is only `true` when both operands refer to the same object.
 
 JavaScript's loose equality operator (`==`) follows the [Abstract Equality Comparison algorithm](https://tc39.es/ecma262/#sec-islooselyequal), which may coerce operands according to a complex set of rules before comparing them. The rules are complex enough that even experienced developers can't always predict the result:
 
@@ -58,7 +58,7 @@ Strict equality (`===`) is much easier to reason about: if the types differ, the
 
 Q: _What's the difference between pass by value and pass by reference?_
 
-A: Pass by value means the callee receives its own copy of the argument value, so reassigning the parameter does not affect the caller. Pass by reference means the callee can operate on the caller's variable itself, so rebinding the parameter changes what the caller's variable refers to. In JavaScript, [function parameters are passed by value](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Functions#passing_arguments). When that copied value is an object reference, both caller and callee can still use it to access and mutate the same object.
+A: Pass by value means the callee receives its own parameter initialized from the argument value, so reassigning the parameter does not affect the caller. Pass by reference means the callee can operate on the caller's variable itself, so rebinding the parameter changes what the caller's variable refers to. In JavaScript, [function parameters are passed by value](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Functions#passing_arguments). If the argument is an object, both caller and callee can still use their own variables to access and mutate the same object.
 
 This distinction trips people up because JavaScript's behavior with objects _looks_ like pass by reference but isn't. The key test: in a language with true pass by reference (C++ with `&`, C# with `ref`), you can write a `swap(a, b)` function that exchanges the values of two variables in the caller's scope. You can't do that in JavaScript.
 
@@ -82,9 +82,9 @@ mutate(original);
 console.log(original.name); // "mutated" — changed
 ```
 
-When you pass `original` to a function, JavaScript copies the _reference value_, not the object itself. Both the caller's variable and the function's parameter now refer to the same object. Mutating properties through either reference affects the shared object, which is why `mutate` works. But `reassign` only overwrites the local copy of the reference — the caller's `original` variable still points to the same object it always did.
+When you pass `original` to a function, the function gets its own local parameter initialized so that it also refers to the same object. Mutating properties through either name affects the shared object, which is why `mutate` works. But `reassign` only overwrites the function's local parameter — the caller's `original` variable still points to the same object it always did.
 
-So the important rule is this: JavaScript never gives the callee the ability to rebind the caller's variable. It only gives the callee another copy of the current value, and that value may itself point to a shared object.
+So the important rule is this: JavaScript never gives the callee the ability to rebind the caller's variable. It gives the callee its own local parameter, and that parameter may itself refer to a shared object.
 
 ## 4. Closures in JavaScript
 
@@ -134,7 +134,7 @@ Q: _Can you please explain what a garbage collector does or is and what's meant 
 
 A: A garbage collector automatically frees memory occupied by objects that are no longer reachable from the collector's roots (often called _GC roots_). A memory leak is memory the program no longer needs but that remains reachable, so the collector can't reclaim it.
 
-Modern JavaScript engines (V8, SpiderMonkey, JavaScriptCore) use collectors built on the foundational [_mark-and-sweep_](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Memory_management#mark-and-sweep_algorithm) idea, layered with generational, incremental, and concurrent techniques to reduce pause times. Starting from a set of roots — such as the global object, bindings in currently active [execution contexts](https://tc39.es/ecma262/#sec-execution-contexts), and, in browser hosts, references held by things like pending timers or event listeners — the collector traverses every reachable reference, following object properties, captured variables, and other links. Any object with no path from a root is considered garbage and can be reclaimed. ECMAScript does not standardize a complete garbage-collection algorithm or an exhaustive root set, but it does define the execution-context machinery and the observable reachability constraints around [WeakRef and FinalizationRegistry](https://tc39.es/ecma262/#sec-processing-model-of-weakref-and-finalizationregistry-targets).
+Modern JavaScript engines use collectors built on the foundational [_mark-and-sweep_](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Memory_management#mark-and-sweep_algorithm) idea, often layered with generational, incremental, and concurrent techniques to reduce pause times. Starting from a set of roots — such as the global object, bindings in currently active [execution contexts](https://tc39.es/ecma262/#sec-execution-contexts), and, in browser hosts, references held by things like pending timers or event listeners — the collector traverses every reachable reference, following object properties, captured variables, and other links. Any object with no path from a root is considered garbage and can be reclaimed. ECMAScript does not standardize a complete garbage-collection algorithm or an exhaustive root set, but it does define the execution-context machinery and the observable reachability constraints around [WeakRef and FinalizationRegistry](https://tc39.es/ecma262/#sec-processing-model-of-weakref-and-finalizationregistry-targets).
 
 In JavaScript, a memory leak happens when code unintentionally keeps a reference alive, so the garbage collector correctly determines the object is still reachable and leaves it alone. The collector is working as designed; the bug is in the code holding onto references it no longer needs.
 
