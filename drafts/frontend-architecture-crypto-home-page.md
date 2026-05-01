@@ -49,7 +49,7 @@ Could clients connect directly to Kraken and Coinbase?
 
 Kraken's WebSocket API is designed for individual traders, not for distributing data to millions of app users. If 5 million clients each open a WebSocket connection to Kraken:
 
-- Kraken would rate-limit or ban us immediately
+- Kraken would likely rate-limit us quickly, and could cut off access entirely
 - We'd be abusing their infrastructure
 - We'd have no control over failover, data normalization, or business logic
 
@@ -150,7 +150,7 @@ Prices are represented as strings rather than floating-point numbers. This is st
 
 <!-- TOPIC: Floating-point precision in financial applications — when to use strings, integers, BigInt, or decimal libraries for monetary values -->
 
-Including source metadata lets the frontend display appropriate warnings if one provider is degraded.
+Including source metadata in the canonical backend record makes it easier to compute degraded or stale states, and leaves us the option of surfacing provider-specific warnings to the frontend later if that becomes useful.
 
 ### Aggregation Strategy
 
@@ -183,13 +183,13 @@ Similar to WebSocket but simpler (HTTP-based, one-way). Still requires persisten
 
 **Option C: Client polling with aggressive caching**
 
-Clients poll a REST endpoint every 3-5 seconds. The endpoint is backed by a CDN with a short TTL.
+Clients poll a REST endpoint every 3 seconds while the price screen is active. The endpoint is backed by a CDN with a short _shared-cache_ TTL, while device-side caching is kept effectively disabled.
 
 A **CDN (Content Delivery Network)** is a globally distributed network of servers that cache and serve content from locations close to users. When a user in Tokyo requests data, they hit a CDN server in Tokyo rather than our origin server in, say, Virginia. This reduces latency and offloads traffic from our infrastructure.
 
-CDNs are typically associated with static assets (images, JavaScript bundles), but they work equally well for API responses. The key is the `Cache-Control` header: we tell the CDN how long a response is valid. For our price data, a 2-second TTL means the CDN caches each response for 2 seconds before fetching a fresh copy from our origin.
+CDNs are typically associated with static assets (images, JavaScript bundles), but cacheable API responses can benefit too. The important distinction is between _shared caches_ and _private caches_: we want the CDN to reuse responses across many users, but we don't want each device independently treating a response as fresh for seconds at a time. In practice, that means configuring a short shared-cache TTL via `s-maxage` (or equivalent CDN rules) while keeping private-cache freshness at `max-age=0`.
 
-Setting up a CDN is straightforward with modern providers. Services like Cloudflare, AWS CloudFront, or Fastly sit in front of your API with minimal configuration — often just a DNS change to route traffic through the CDN. You configure caching rules (which paths to cache, for how long) via their dashboard or infrastructure-as-code.
+Putting a CDN in front of the API is mechanically straightforward with modern providers like Cloudflare, AWS CloudFront, or Fastly, but dynamic API caching is not "flip a switch and forget it." You still need explicit cache rules, cache-key decisions, and response headers that match the semantics you want.
 
 ```
 Mobile App  ──poll──▶  CDN Edge  ──cache miss──▶  API Server  ──read──▶  Redis
@@ -197,14 +197,14 @@ Mobile App  ──poll──▶  CDN Edge  ──cache miss──▶  API Server
                          └── cache hit ──▶ (return cached response)
 ```
 
-At 5 million users polling every 5 seconds, we'd see ~1 million requests per second. But with a 2-second CDN cache TTL:
+At 5 million users polling every 3 seconds, we'd see ~1.7 million client requests per second. But with a 1-second shared-cache TTL at the CDN:
 
 - The CDN absorbs the vast majority of requests
-- Each CDN edge location (PoP) only hits origin once per TTL expiry, so even with hundreds of edge locations the origin sees a few hundred requests per second at most
+- Each CDN edge location (PoP) only hits origin once per TTL expiry, so even with hundreds of edge locations the origin still sees only a few hundred requests per second
 - Stateless servers scale horizontally with ease
 - No WebSocket infrastructure complexity
 
-The tradeoff is latency. With a 2-second cache TTL and clients polling every 3-5 seconds, worst-case staleness is ~7 seconds (data changes right after the CDN caches the old response, and the client just finished polling). We specified a 5-second _maximum_, so we'd need to tune these numbers — perhaps a 1-second cache TTL and 3-second polling interval, giving a worst case of ~4 seconds plus network round-trip time at each hop.
+The tradeoff is latency. With a 1-second shared-cache TTL and clients polling every 3 seconds, worst-case staleness is just under 4 seconds plus network round-trip time. That fits the 5-second requirement without the operational cost of millions of persistent client connections.
 
 **Option D: Hybrid — polling with WebSocket upgrade for active users**
 
@@ -219,7 +219,7 @@ For a mobile app, I'd start with **Option C (CDN-backed polling)** for these rea
 1. **Simplicity** — Stateless HTTP is easier to build, deploy, debug, and scale
 2. **Mobile-friendly** — Polling lets the client control frequency based on app state (foreground/background)
 3. **Cost-effective** — CDN bandwidth is cheap; WebSocket server memory is not
-4. **Good enough** — 3-5 second updates meet the 5-second requirement with margin
+4. **Meets the requirement** — A tuned 3-second polling interval with a 1-second shared-cache TTL stays inside the 5-second freshness budget
 
 If we later find that users want true real-time (sub-second) updates, we can add WebSocket as an enhancement without rearchitecting the system.
 
@@ -252,10 +252,10 @@ The `timestamp` is when the backend last received data from upstream. The `stale
 Cache headers:
 
 ```
-Cache-Control: public, max-age=2, stale-while-revalidate=10
+Cache-Control: public, max-age=0, s-maxage=1, stale-while-revalidate=10, stale-if-error=10
 ```
 
-This tells the CDN to cache for 2 seconds, and to serve stale responses for up to 10 additional seconds while fetching a fresh copy in the background. That way, even if the origin is briefly unreachable, clients still get a response rather than an error.
+This separates shared-cache behavior from private-cache behavior. `s-maxage=1` gives the CDN a 1-second freshness window, while `max-age=0` keeps private caches from treating the response as fresh. `stale-while-revalidate` lets supporting caches serve stale data during background revalidation, and `stale-if-error` covers brief origin failures.
 
 ## Complete Data Flow
 
@@ -283,8 +283,8 @@ This tells the CDN to cache for 2 seconds, and to serve stale responses for up t
 │                   └──────┬──────┘                                       │
 │                          ▼                                              │
 │                   ┌─────────────┐                                       │
-│                   │    Redis    │ ◄── TTL: 10s (auto-expire stale data) │
-│                   └─────────────┘                                       │
+│                   │    Redis    │ ◄── retain latest snapshot; derive    │
+│                   └─────────────┘      staleness from timestamp          │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
                                    │
@@ -320,7 +320,7 @@ This tells the CDN to cache for 2 seconds, and to serve stale responses for up t
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                         │
 │    5 million React Native apps                                          │
-│    Polling every 3-5 seconds (foreground)                               │
+│    Polling every 3 seconds (foreground)                                 │
 │    Reduced/no polling (background)                                      │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
@@ -399,6 +399,29 @@ interface PriceResponse {
   stale: boolean;
 }
 
+function isValidPriceResponse(data: unknown): data is PriceResponse {
+  if (typeof data !== "object" || data === null) return false;
+
+  const obj = data as Record<string, unknown>;
+
+  if (!Array.isArray(obj.prices)) return false;
+  if (typeof obj.timestamp !== "number") return false;
+  if (typeof obj.stale !== "boolean") return false;
+
+  return obj.prices.every((p) => {
+    if (typeof p !== "object" || p === null) return false;
+    const item = p as Record<string, unknown>;
+    return (
+      typeof item.symbol === "string" &&
+      typeof item.price === "string" &&
+      !isNaN(parseFloat(item.price as string)) &&
+      parseFloat(item.price as string) > 0 &&
+      typeof item.change24h === "string" &&
+      !isNaN(parseFloat(item.change24h as string))
+    );
+  });
+}
+
 interface UsePricesResult {
   data: PriceResponse | null;
   isLoading: boolean;
@@ -407,12 +430,12 @@ interface UsePricesResult {
   refetch: () => Promise<void>;
 }
 
-const POLLING_INTERVAL = 4000; // 4 seconds
+const POLLING_INTERVAL = 3000; // 3 seconds
 const API_URL = "https://api.ourapp.com/v1/prices";
 
 export function usePrices(): UsePricesResult {
   const [data, setData] = useState<PriceResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(true); // true until first successful fetch
+  const [isLoading, setIsLoading] = useState(true); // true until the initial request settles
   const [isFetching, setIsFetching] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
@@ -435,7 +458,11 @@ export function usePrices(): UsePricesResult {
         throw new Error(`HTTP ${response.status}`);
       }
 
-      const json: PriceResponse = await response.json();
+      const json: unknown = await response.json();
+
+      if (!isValidPriceResponse(json)) {
+        throw new Error("Malformed price response");
+      }
 
       setData(json);
       setError(null);
@@ -500,8 +527,9 @@ export function usePrices(): UsePricesResult {
 
 Key decisions in this implementation:
 
-- **`isLoading` vs `isFetching`** — `isLoading` is true only until the first successful fetch. `isFetching` is true during any fetch. This lets us show a full-screen loader initially, but a subtle indicator during refreshes.
+- **`isLoading` vs `isFetching`** — `isLoading` is true only until the initial request settles. `isFetching` is true during any fetch. This lets us show a full-screen loader initially, then either data or an error state, while keeping later refreshes to a subtle indicator.
 - **Keep stale data on error** — If a fetch fails but we have previous data, we keep showing it. The user sees prices (possibly stale) rather than an error screen.
+- **Validate before storing** — `response.json()` is untrusted input. Validate the shape before calling `setData`, and treat malformed payloads as errors.
 - **Abort in-flight requests** — Each new fetch cancels any pending request via `AbortController`. This prevents stale responses from overwriting fresh data and avoids state updates after the component unmounts.
 - **Pause polling when backgrounded** — No point fetching data the user can't see. This saves battery and bandwidth.
 - **Fetch immediately on foreground** — When the user returns, we fetch fresh data rather than waiting for the next interval.
@@ -669,10 +697,12 @@ export function PriceCard({ symbol, price, change24h }: PriceCardProps) {
 function formatPrice(price: string): string {
   const num = parseFloat(price);
 
-  // Intl.NumberFormat is safer than toLocaleString in React Native — Hermes
-  // (the default JS engine) has historically had inconsistent Intl support,
-  // so a polyfill like intl-pluralrules or @formatjs may be needed depending
-  // on the minimum supported Hermes version.
+  // Using Intl.NumberFormat makes the formatting rules explicit. Modern
+  // Hermes supports both Intl.NumberFormat and Number.prototype.toLocaleString
+  // on iOS and Android, though Intl behavior still varies by platform and OS
+  // version. If you support older Hermes baselines or need broader locale
+  // guarantees, test carefully and consider a full Intl polyfill such as
+  // FormatJS.
   const formatter = new Intl.NumberFormat("en-US", {
     minimumFractionDigits: num >= 1 ? 2 : 4,
     maximumFractionDigits: num >= 1 ? 2 : 4,
@@ -749,7 +779,7 @@ If both are down:
 API servers should handle Redis being unavailable:
 
 1. Return 503 with `Retry-After` header
-2. CDN continues serving cached responses until TTL expires
+2. CDN can continue serving recently cached responses during the configured `stale-if-error` window
 3. Frontend shows error but keeps displaying last known data
 
 ### Frontend: Network Errors
@@ -778,6 +808,7 @@ function isValidPriceResponse(data: unknown): data is PriceResponse {
 
   if (!Array.isArray(obj.prices)) return false;
   if (typeof obj.timestamp !== "number") return false;
+  if (typeof obj.stale !== "boolean") return false;
 
   return obj.prices.every((p) => {
     if (typeof p !== "object" || p === null) return false;
@@ -800,12 +831,14 @@ function isValidPriceResponse(data: unknown): data is PriceResponse {
 
 The CDN is the critical piece for handling 5 million users. Configuration:
 
-- **Cache TTL**: 2 seconds (balances freshness with cache hit rate)
+- **Shared-cache TTL**: 1 second (`s-maxage=1`)
+- **Private-cache freshness**: effectively disabled (`max-age=0`)
 - **Stale-while-revalidate**: 10 seconds (serve stale while fetching fresh)
+- **Stale-if-error**: 10 seconds (serve stale briefly if origin is unavailable)
 - **Edge locations**: Global distribution for low latency
 - **Cache key**: Just the URL path (no query params, no cookies)
 
-The cache hit rate depends on CDN topology: each edge PoP maintains its own cache and needs to fetch from origin independently on TTL expiry. A major CDN might have a few hundred PoPs, so with a 2-second TTL, origin sees roughly one request per PoP every 2 seconds — a few hundred requests per second at most, trivially handleable. The vast majority of the ~1 million client requests per second are served from edge cache without touching origin.
+The cache hit rate depends on CDN topology: each edge PoP maintains its own cache and needs to fetch from origin independently on TTL expiry. A major CDN might have a few hundred PoPs, so with a 1-second shared-cache TTL, origin sees roughly one request per PoP per second — still only a few hundred requests per second. The vast majority of the ~1.7 million client requests per second are served from edge cache without touching origin.
 
 <!-- TOPIC: CDN caching strategies for dynamic API responses — cache key design, regional variation, cache invalidation vs TTL-based expiry, Vary headers, and edge compute -->
 
@@ -829,7 +862,7 @@ A single Redis instance is likely sufficient (prices for 5 cryptos is tiny). For
 
 - Use Redis Sentinel for automatic failover — it monitors a primary instance and promotes a replica if the primary fails. Redis Cluster (which provides horizontal sharding) is unnecessary here since our data set is trivially small.
 - Configure appropriate memory limits
-- Set TTLs on all keys to prevent unbounded growth
+- Keep the current-price snapshot as the latest known good value rather than expiring it aggressively; derive staleness from its timestamp instead. TTLs are more appropriate for auxiliary coordination keys such as locks.
 
 ## What We'd Add in Production
 
