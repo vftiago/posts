@@ -34,7 +34,7 @@ map.set("1", "string one");
 console.log(map.size); // 2 — distinct keys
 ```
 
-`Map` also preserves insertion order for iteration, exposes a `size` property directly, and is iterable out of the box with `for...of`. Ordinary objects have more nuanced [own-property ordering](https://tc39.es/ecma262/#sec-ordinaryownpropertykeys): integer index keys come first in ascending numeric order, then other string keys in insertion order, then Symbols in insertion order. They also inherit prototype properties unless you deliberately create them with `Object.create(null)`. Plain objects work well for structured data with known string keys (configuration, parsed JSON, API responses), while `Map` is the better choice when keys are dynamic, non-string, or when you want keyed-collection semantics rather than object-property semantics.
+`Map` also preserves insertion order for iteration, exposes a `size` property directly, and is iterable out of the box with `for...of`. Ordinary objects have more nuanced [own-property ordering](https://tc39.es/ecma262/#sec-ordinaryownpropertykeys): integer index keys come first in ascending numeric order, then other string keys in insertion order, then Symbols in insertion order. They also inherit prototype properties unless you deliberately create them with [`Object.create(null)`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/create). If you do use an object as a dictionary, prefer [`Object.hasOwn()`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/hasOwn) for membership checks. Plain objects work well for structured data with known string keys (configuration, parsed JSON, API responses), while `Map` is the better choice when keys are dynamic, non-string, or when you want keyed-collection semantics rather than object-property semantics.
 
 ## 2. Strict vs. Loose Equality
 
@@ -52,7 +52,7 @@ JavaScript's loose equality operator (`==`) follows the [Abstract Equality Compa
 
 The first two comparisons are `true`, but the third is `false` — loose equality isn't transitive, which makes it difficult to reason about. The underlying problem is that coercion happens pairwise: each comparison can follow a different conversion path, so two `true` comparisons do not imply a third one will also be `true`.
 
-Strict equality (`===`) is much easier to reason about: if the types differ, the result is `false`, and for most values that's the end of the story. Two number-specific cases are worth knowing, though: `NaN === NaN` is `false`, and `+0 === -0` is `true`. If those cases matter, use `Object.is()`. For all other values it agrees with `===`, but `Object.is(NaN, NaN)` is `true` and `Object.is(+0, -0)` is `false`, so it exposes JavaScript's same-value comparison directly.
+Strict equality (`===`) is much easier to reason about: if the types differ, the result is `false`, and for most values that's the end of the story. Two number-specific cases are worth knowing, though: `NaN === NaN` is `false`, and `+0 === -0` is `true`. If those cases matter, use [`Object.is()`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/is). For all other values it agrees with `===`, but `Object.is(NaN, NaN)` is `true` and `Object.is(+0, -0)` is `false`, so it exposes JavaScript's same-value comparison directly.
 
 ## 3. Pass by Value vs. Pass by Reference
 
@@ -90,7 +90,7 @@ So the important rule is this: JavaScript never gives the callee the ability to 
 
 Q: _What is a closure in JavaScript?_
 
-A: A closure is a function that retains access to variables from its enclosing lexical scope, even after that scope has finished executing.
+A: [A closure is the combination of a function and its lexical environment.](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Closures)
 
 When JavaScript creates a function, the function object stores a reference to the _lexical environment_ in which it was defined — the ECMAScript specification models this with the function's [`[[Environment]]` internal slot](https://tc39.es/ecma262/#table-internal-slots-of-ecmascript-function-objects). This means a function can resolve identifiers from the scope that existed when it was created, regardless of when or where it's eventually called.
 
@@ -135,6 +135,8 @@ Q: _Can you please explain what a garbage collector does or is and what's meant 
 A: A garbage collector automatically reclaims memory that is no longer reachable from a set of roots (often called _GC roots_). A memory leak is memory the program no longer needs but that remains reachable, so the collector can't reclaim it.
 
 Modern JavaScript engines use collectors built on the foundational [_mark-and-sweep_](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Memory_management#mark-and-sweep_algorithm) idea, often layered with generational, incremental, and concurrent techniques to reduce pause times. Starting from a set of roots — such as the global object, bindings in currently active [execution contexts](https://tc39.es/ecma262/#sec-execution-contexts), and, in browser hosts, references held by things like pending timers or event listeners — the collector traverses every reachable reference, following object properties, captured variables, and other links. Anything with no path from a root is considered garbage and can be reclaimed. ECMAScript does not standardize a complete garbage-collection algorithm or an exhaustive root set, but it does define the execution-context machinery and the observable reachability constraints around [WeakRef and FinalizationRegistry](https://tc39.es/ecma262/#sec-processing-model-of-weakref-and-finalizationregistry-targets).
+
+Just as important, becoming unreachable does not imply immediate reclamation. Reachability determines whether an object is eligible for collection; the engine decides _when_ to run GC work.
 
 In JavaScript, a memory leak happens when code unintentionally retains a reference to something it no longer needs, so the garbage collector still finds it reachable and leaves it alone. The collector is working as designed; the bug is in the code holding onto references it no longer needs.
 
