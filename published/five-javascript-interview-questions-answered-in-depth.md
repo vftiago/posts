@@ -12,7 +12,7 @@ The following five questions still come up regularly in JavaScript interviews, b
 
 Q: _I have a list of variables each with a unique key in my JavaScript code and I want to store the variables in a data structure so that I can efficiently retrieve the one that corresponds to each key. What are some data structures I can use for that?_
 
-A: Use a plain object or a `Map`. Both can be fast in practice, but `Map` is the purpose-built keyed collection and the [specification](https://262.ecma-international.org/6.0/#sec-map-objects) requires implementations to provide sublinear access times on average.
+A: Use a plain object or a `Map`. Both can be fast in practice, but `Map` is the purpose-built keyed collection and the [specification](https://tc39.es/ecma262/#sec-map-objects) requires implementations to provide sublinear access times on average.
 
 For general-purpose keyed lookup in ordinary JavaScript code, the two main built-in choices are plain objects and `Map`.
 
@@ -134,7 +134,7 @@ Q: _Can you please explain what a garbage collector does or is and what's meant 
 
 A: A garbage collector automatically reclaims memory that is no longer reachable from a set of roots (often called _GC roots_). A memory leak is memory the program no longer needs but that remains reachable, so the collector can't reclaim it.
 
-Modern JavaScript engines use collectors built on the foundational [_mark-and-sweep algorithm_](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Memory_management#mark-and-sweep_algorithm). Starting from a set of roots — typically including the [global object](https://developer.mozilla.org/en-US/docs/Glossary/Global_object) and values reachable from currently active [execution contexts](https://tc39.es/ecma262/#sec-execution-contexts) — the collector traverses references to find everything reachable. Anything with no path from that root set is considered garbage and can be reclaimed.
+Modern JavaScript engines use collectors built on the foundational [_mark-and-sweep algorithm_](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Memory_management#mark-and-sweep_algorithm). The collector starts from a set of roots — values the engine or host environment treats as directly reachable, such as the [global object](https://developer.mozilla.org/en-US/docs/Glossary/Global_object) and values referenced by currently executing code — and traverses references outward to find everything reachable. Anything with no path from that root set is considered garbage and can be reclaimed.
 
 A memory leak happens when code unintentionally retains a reference to something it no longer needs, so the garbage collector still finds it reachable and leaves it alone. The collector is working as designed; the bug is in the code holding onto references it no longer needs.
 
