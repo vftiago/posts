@@ -12,7 +12,7 @@ The following five questions still come up regularly in JavaScript interviews, b
 
 Q: _I have a list of variables each with a unique key in my JavaScript code and I want to store the variables in a data structure so that I can efficiently retrieve the one that corresponds to each key. What are some data structures I can use for that?_
 
-A: Use a plain object or a `Map`. Both can be fast in practice, but `Map` is the purpose-built keyed collection and the specification expects implementations to provide sublinear average access time.
+A: Use a plain object or a `Map`. Both can be fast in practice, but `Map` is the purpose-built keyed collection and the specification requires implementations to provide sublinear average access time on average.
 
 For general-purpose keyed lookup in ordinary JavaScript code, the two main built-in choices are plain objects and `Map`.
 
@@ -134,11 +134,9 @@ Q: _Can you please explain what a garbage collector does or is and what's meant 
 
 A: A garbage collector automatically reclaims memory that is no longer reachable from a set of roots (often called _GC roots_). A memory leak is memory the program no longer needs but that remains reachable, so the collector can't reclaim it.
 
-Modern JavaScript engines use collectors built on the foundational [_mark-and-sweep_](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Memory_management#mark-and-sweep_algorithm) idea, often layered with generational, incremental, and concurrent techniques to reduce pause times. Starting from a set of roots — such as the global object, bindings in currently active [execution contexts](https://tc39.es/ecma262/#sec-execution-contexts), and, in browser hosts, references held by things like pending timers or event listeners — the collector traverses every reachable reference, following object properties, captured variables, and other links. Anything with no path from a root is considered garbage and can be reclaimed. ECMAScript does not standardize a complete garbage-collection algorithm or an exhaustive root set, but it does define the execution-context machinery and the observable reachability constraints around [WeakRef and FinalizationRegistry](https://tc39.es/ecma262/#sec-processing-model-of-weakref-and-finalizationregistry-targets).
+Modern JavaScript engines use collectors built on the foundational [_mark-and-sweep algorithm_](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Memory_management#mark-and-sweep_algorithm). Starting from a set of roots — such as the global object and values reachable from currently active [execution contexts](https://tc39.es/ecma262/#sec-execution-contexts) — the collector traverses references to find everything reachable. Anything with no path from that root set is considered garbage and can be reclaimed.
 
-Just as important, becoming unreachable does not imply immediate reclamation. Reachability determines whether an object is eligible for collection; the engine decides _when_ to run GC work.
-
-In JavaScript, a memory leak happens when code unintentionally retains a reference to something it no longer needs, so the garbage collector still finds it reachable and leaves it alone. The collector is working as designed; the bug is in the code holding onto references it no longer needs.
+A memory leak happens when code unintentionally retains a reference to something it no longer needs, so the garbage collector still finds it reachable and leaves it alone. The collector is working as designed; the bug is in the code holding onto references it no longer needs.
 
 Common sources of memory leaks in JavaScript:
 
